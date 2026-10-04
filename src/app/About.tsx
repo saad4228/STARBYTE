@@ -16,18 +16,19 @@ const PROFILE = {
   name: "Mohammad Saad",
   tagline: "Developer & designer",
   /** One short line under the name. */
-  blurb: "I build things for the web — and occasionally whole little worlds to put them in.",
+  blurb: "Same screen. Same moment. Different places.",
   /** The dialogue box. One string per line. */
   intro: [
-    "Hi — I'm Saad.",
-    "STARBYTE started as a simple question: why is watching something with friends still so awkward? So I built the thing I wanted — a room where the movie stays on your own machine and only the moment is shared.",
-    "Thanks for stopping by. Go start a room with someone.",
+    "Hey there.",
+    "I grew up on games, movies, and those late-night moments when you just wish your friends were there to experience them with you.",
+    "We all know the struggle — buffering, watching ahead, or constantly hearing “wait, go back.”",
+    "So I built STARBYTE. A place to watch, talk, laugh, and experience things together — no matter where your friends are.",
   ],
   /** Shown as the character sheet. Keep the labels short. */
   stats: [
     { label: "Role", value: "Design + engineering" },
     { label: "Focus", value: "Web apps, real-time, interfaces" },
-    { label: "Favourite part", value: "Making software feel like a place" },
+    { label: "Why STARBYTE", value: "No more “wait, go back”" },
   ],
   /** Add your own. `icon` is one of the keys in LINK_ICONS below. */
   links: [
@@ -187,7 +188,7 @@ export default function About() {
         <section className="about__cta frame">
           <Pixel sprite={sparkleSmall} scale={3} />
           <p>
-            <strong>Enough about me.</strong> Grab a film, send a link to someone.
+            <strong>The party starts when you press play.</strong> Grab a film, send a link to someone.
           </p>
           <PixelLink to="/create" iconEnd={<ArrowRight size={18} strokeWidth={2.5} />}>
             Enter cinema
