@@ -192,8 +192,7 @@ Configuration lives in `wrangler.jsonc` → `vars`:
 | `MAX_ROOMS_PER_IP_PER_HOUR` | `12` | Per-IP creation limit (IPs are only kept as salted hashes) |
 | `ALLOWED_ORIGINS` | `""` | Extra comma-separated origins allowed to use the API from a browser |
 
-Optional build-time variables: `VITE_GITHUB_URL` adds a GitHub link to the footer and the About page,
-and `VITE_CONTACT_EMAIL` adds an email link to the About page. Put them in a `.env` file:
+Optional build-time variables. `VITE_GITHUB_URL` overrides the GitHub links and `VITE_CONTACT_EMAIL` adds an email link to the About page (there is no email by default). Put them in a `.env` file:
 
 ```
 VITE_GITHUB_URL=https://github.com/your-handle

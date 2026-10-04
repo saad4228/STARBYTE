@@ -10,7 +10,8 @@ import { VisitCounter } from "../ui/VisitCounter";
 import { Sparkles, TrailAnchor } from "./parts";
 
 const WALKERS = [5, 13].map((seed) => viewerSprite(viewerLook(seed)));
-const GITHUB_URL = import.meta.env.VITE_GITHUB_URL as string | undefined;
+/** In the footer, "GitHub" means this project's source — the About page links the person. */
+const GITHUB_URL = (import.meta.env.VITE_GITHUB_URL as string | undefined) || "https://github.com/saad4228/STARBYTE";
 
 /** The last scene: the night cinema, doors open, everyone walking in. */
 export function FinalCta() {
@@ -81,14 +82,12 @@ export function Footer() {
             <Link to="/create">Create a room</Link>
             <Link to="/join">Join a room</Link>
           </div>
-          {GITHUB_URL && (
-            <div>
-              <h3>Developers</h3>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                GitHub
-              </a>
-            </div>
-          )}
+          <div>
+            <h3>Developers</h3>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              Source on GitHub
+            </a>
+          </div>
           <div>
             <h3>Policies</h3>
             <Link to="/privacy">Privacy</Link>

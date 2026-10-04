@@ -30,9 +30,15 @@ const PROFILE = {
     { label: "Focus", value: "Web apps, real-time, interfaces" },
     { label: "Why STARBYTE", value: "No more “wait, go back”" },
   ],
-  /** Add your own. `icon` is one of the keys in LINK_ICONS below. */
+  /**
+   * Add your own. `icon` is one of the keys in LINK_ICONS below, and an empty `href` is
+   * skipped — so a link you haven't filled in simply doesn't appear.
+   *
+   * The env vars let a deployment override these without editing the file; the defaults are
+   * what ships. Paste a URL straight in to add one.
+   */
   links: [
-    { icon: "github", label: "GitHub", href: import.meta.env.VITE_GITHUB_URL ?? "" },
+    { icon: "github", label: "GitHub", href: import.meta.env.VITE_GITHUB_URL || "https://github.com/saad4228" },
     { icon: "mail", label: "Email", href: import.meta.env.VITE_CONTACT_EMAIL ? `mailto:${import.meta.env.VITE_CONTACT_EMAIL}` : "" },
     { icon: "linkedin", label: "LinkedIn", href: "" },
     { icon: "twitter", label: "X / Twitter", href: "" },
