@@ -1,5 +1,6 @@
 import { LIMITS } from "../../shared/constants";
 import type { MediaFingerprint, RoomSourceKind } from "../../shared/protocol";
+import { SourceError } from "./errors";
 import { parseYouTubeId, probeYouTube } from "./youtube";
 
 /**
@@ -17,7 +18,7 @@ export interface ResolvedSource {
   warning?: string;
 }
 
-export class SourceError extends Error {}
+export { SourceError } from "./errors";
 
 const DRIVE_HOSTS = new Set(["drive.google.com", "docs.google.com", "drive.usercontent.google.com"]);
 const VIDEO_EXT = /\.(mp4|m4v|webm|ogv|ogg|mov|mkv)(?:$|[?#])/i;

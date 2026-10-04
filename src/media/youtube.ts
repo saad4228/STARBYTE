@@ -1,4 +1,5 @@
 import type { AdapterEvent, MediaAdapter } from "./adapter";
+import { SourceError } from "./errors";
 
 /**
  * YouTube, through the official IFrame Player API.
@@ -104,7 +105,8 @@ export function parseYouTubeId(url: URL): string | null {
   return m?.[1] ?? null;
 }
 
-export class YouTubeError extends Error {}
+/** Shown verbatim to whoever pasted the link, so it extends the shared source error. */
+export class YouTubeError extends SourceError {}
 
 function describeYouTubeError(code: number): string {
   switch (code) {
@@ -132,6 +134,8 @@ function createPlayer(
   videoId: string,
   onState: (state: number) => void,
   onRate: () => void,
+  /** Errors that arrive after the player said it was ready — a missing video reports in this order. */
+  onLateError: (message: string) => void = () => {},
 ): Promise<YTPlayer> {
   return new Promise<YTPlayer>((resolve, reject) => {
     const slot = document.createElement("div");
@@ -165,7 +169,8 @@ function createPlayer(
         },
         onError: (e: { data: number }) => {
           const message = describeYouTubeError(e.data);
-          if (!settled) {
+          if (settled) onLateError(message);
+          else {
             settled = true;
             clearTimeout(timer);
             reject(new YouTubeError(message));
@@ -186,6 +191,9 @@ export async function probeYouTube(videoId: string): Promise<{ duration: number 
   host.style.cssText = "position:fixed;left:-9999px;top:0;width:320px;height:180px;opacity:0;pointer-events:none";
   document.body.appendChild(host);
   let player: YTPlayer | null = null;
+  // A missing or blocked video says it is ready and only then reports the error, so the real
+  // reason has to be picked up here rather than from the create promise.
+  let late: string | null = null;
   try {
     player = await createPlayer(
       api,
@@ -193,13 +201,17 @@ export async function probeYouTube(videoId: string): Promise<{ duration: number 
       videoId,
       () => {},
       () => {},
+      (message) => {
+        late = message;
+      },
     );
     // Duration is occasionally still 0 at ready; give it a moment to settle.
     let duration = player.getDuration();
-    for (let i = 0; i < 20 && (!Number.isFinite(duration) || duration <= 0); i++) {
+    for (let i = 0; i < 20 && !late && (!Number.isFinite(duration) || duration <= 0); i++) {
       await new Promise((r) => setTimeout(r, 150));
       duration = player.getDuration();
     }
+    if (late) throw new YouTubeError(late);
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new YouTubeError("That video has no fixed length — a live stream can't be synchronised yet.");
     }
