@@ -1,5 +1,8 @@
 # STARBYTE — Watch Party
 
+> © 2026 Mohammad Saad. All rights reserved. This code is public to view, not to reuse —
+> see [License](#license).
+
 **Your screen. Their reactions.** A multiplayer media room: friends watch together in perfect sync
 while every movie stays on its owner's device. STARBYTE doesn't own the movie — it owns the shared
 experience.
@@ -374,3 +377,14 @@ page.
 - **A 16:9 picture on an upright phone is capped by the screen's width** — about 220px tall on a
   390px-wide phone, whatever the layout does. Fullscreen asks the phone to rotate (where the
   browser allows it), which is the only thing that actually makes the picture bigger.
+
+## License
+
+© 2026 Mohammad Saad. **All rights reserved.**
+
+This repository is public so the work can be seen, not reused. No license is granted: you may
+not copy, modify, redistribute, deploy or build on this code, in whole or in part, without written
+permission. See [`LICENSE`](LICENSE) for the full terms.
+
+Third-party dependencies (React, the fonts, and the rest of `package.json`) remain under their own
+licenses. For permission requests, get in touch through [GitHub](https://github.com/saad4228).

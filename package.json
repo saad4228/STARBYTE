@@ -1,6 +1,7 @@
 {
   "name": "starbyte-watch-party",
   "private": true,
+  "license": "UNLICENSED",
   "version": "0.1.0",
   "description": "STARBYTE — Watch Party. A multiplayer media room: your screen, their reactions.",
   "type": "module",
