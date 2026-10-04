@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "starbyte-watch-party",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+
+  // Static SPA assets are free on Workers. Only /api/* wakes the Worker.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // One Durable Object per room (authoritative playback state + WebSocket fan-out),
+  // plus a tiny Gatekeeper object that rate-limits room creation.
+  // SQLite-backed classes are required for the Workers Free plan.
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomDurableObject" },
+      { "name": "GATE", "class_name": "Gatekeeper" },
+      { "name": "STATS", "class_name": "Stats" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomDurableObject", "Gatekeeper"] },
+    { "tag": "v2", "new_sqlite_classes": ["Stats"] }
+  ],
+
+  // Free-tier guard rails. Tune these per deployment.
+  "vars": {
+    "MAX_ROOMS_PER_DAY": "2000",
+    "MAX_ROOMS_PER_IP_PER_HOUR": "12",
+    "ALLOWED_ORIGINS": ""
+  },
+
+  "observability": { "enabled": true }
+}

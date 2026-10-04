@@ -1,0 +1,311 @@
+/* ═══ App shell (create, join, lobby, legal) ══════════════════════════════ */
+
+.app {
+  position: relative;
+  min-height: 100dvh;
+  isolation: isolate;
+  overflow-x: clip;
+}
+.app__sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 37px 61px, #fff 1px, transparent 1.5px) 0 0 / 340px 340px,
+    radial-gradient(circle at 211px 143px, #cdb8ff 1px, transparent 1.5px) 0 0 / 340px 340px,
+    radial-gradient(circle at 301px 29px, #b784ff 1px, transparent 1.5px) 0 0 / 340px 340px,
+    radial-gradient(circle at 128px 251px, rgba(255, 255, 255, 0.6) 0.8px, transparent 1.2px) 0 0 / 340px 340px,
+    radial-gradient(1000px 600px at 80% -10%, rgba(139, 92, 246, 0.18), transparent 62%),
+    radial-gradient(900px 600px at -10% 60%, rgba(36, 18, 61, 0.85), transparent 70%),
+    var(--bg);
+}
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--nav-h);
+}
+.app__header-end {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.app__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Padding, not height: keeps a comfortable tap target without moving the label. */
+  padding: 12px 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.app__back:hover {
+  color: var(--text);
+}
+
+/* Narrow screens: drop the wordmark so the status pill and Leave always fit. */
+@media (max-width: 560px) {
+  .app__header .logo__words {
+    display: none;
+  }
+  .app__header-end {
+    gap: 10px;
+  }
+}
+.app__main {
+  max-width: calc(1060px + var(--gutter) * 2);
+  padding-top: clamp(20px, 5vh, 56px);
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+.app__main--wide {
+  max-width: calc(var(--maxw) + var(--gutter) * 2);
+}
+
+/* ── Page furniture ──────────────────────────────────────────────────────── */
+
+.page-head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.page-head--center {
+  justify-items: center;
+  text-align: center;
+}
+.page-title {
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.05;
+  text-wrap: balance;
+}
+.page-sub {
+  max-width: 540px;
+  color: var(--text-2);
+  font-size: 17px;
+}
+.form-card {
+  display: grid;
+  gap: 22px;
+  padding: clamp(20px, 3vw, 32px);
+}
+.fineprint {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.form-error {
+  color: var(--danger);
+  font-size: 14px;
+}
+.notice {
+  --tone: var(--purple-bright);
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--tone);
+  background: rgba(11, 9, 21, 0.75);
+  font-size: 14.5px;
+}
+.notice--warn {
+  --tone: var(--warm);
+}
+.notice--danger {
+  --tone: var(--danger);
+}
+.notice--ok {
+  --tone: var(--ok);
+}
+.notice__title {
+  color: var(--tone);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.notice__body {
+  color: var(--text-2);
+}
+.notice__body strong {
+  color: var(--text);
+}
+
+/* ── Create ──────────────────────────────────────────────────────────────── */
+
+.create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  grid-template-areas:
+    "head head"
+    "form aside";
+  align-items: start;
+  gap: 0 clamp(28px, 5vw, 72px);
+}
+.create .page-head {
+  grid-area: head;
+}
+.create__form {
+  grid-area: form;
+}
+.create__aside {
+  position: sticky;
+  top: 24px;
+  grid-area: aside;
+  display: grid;
+  justify-items: center;
+  gap: 32px;
+  padding-top: 28px;
+}
+.steps {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  color: var(--text-2);
+}
+.steps strong {
+  color: var(--text);
+}
+.steps__n {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  background: var(--purple);
+  color: #0b0716;
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (max-width: 860px) {
+  .create {
+    grid-template-columns: 1fr;
+    grid-template-areas: "head" "form" "aside";
+  }
+  .create__aside {
+    position: static;
+  }
+}
+
+/* ── Join ────────────────────────────────────────────────────────────────── */
+
+.join {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-top: 2vh;
+}
+.join__mascot {
+  margin-bottom: 8px;
+}
+.join__form {
+  width: 100%;
+}
+.join__alt {
+  margin-top: 10px;
+  color: var(--text-2);
+  text-align: center;
+}
+.join__alt a,
+.legal a {
+  color: var(--purple-bright);
+}
+.join__alt a {
+  display: inline-block;
+  padding: 8px 2px;
+}
+
+/* ── Legal / 404 ─────────────────────────────────────────────────────────── */
+
+.legal {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.legal .page-title {
+  margin-top: 10px;
+}
+.legal__lede {
+  margin-top: 16px;
+  font-size: 19px;
+}
+.legal h2 {
+  margin: 36px 0 12px;
+  color: var(--purple-bright);
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.legal p,
+.legal li {
+  color: var(--text-2);
+}
+.legal ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+.lost {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding-top: 8vh;
+  text-align: center;
+}
+
+/* Media sources on the create form: a statement of what's available, not a picker —
+   the actual source is chosen in the lobby where it can be verified first. */
+.srclist {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.srclist li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(11, 9, 21, 0.5);
+}
+.srclist li + li {
+  border-top-color: transparent;
+}
+.srclist__body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.srclist__title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.srclist__desc {
+  color: var(--text-3);
+  font-size: 12.5px;
+}

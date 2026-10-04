@@ -1,0 +1,65 @@
+/* STARBYTE design tokens. Dark-only by design: the brand lives at night. */
+:root {
+  /* Surfaces */
+  --bg: #07060c;
+  --bg-2: #0b0915;
+  --surface: #111019;
+  --surface-2: #181522;
+  --surface-3: #221c33;
+  --violet-deep: #24123d;
+  --violet-ink: #1a0d2e;
+
+  /* Brand */
+  --purple: #8b5cf6;
+  --purple-bright: #b784ff;
+  --purple-soft: #dccbff;
+  --purple-dim: #5b3a99;
+
+  /* Text */
+  --text: #f5f1ff;
+  --text-2: #a9a0b8;
+  --text-3: #8a8199;
+
+  /* Accents — warm and status colors appear sparingly */
+  --warm: #ffb84d;
+  --ok: #7ee8b8;
+  --danger: #ff6b8b;
+  --live: #ff5a6a;
+
+  /* Lines */
+  --line: rgba(183, 132, 255, 0.14);
+  --line-2: rgba(183, 132, 255, 0.28);
+  --line-3: rgba(183, 132, 255, 0.5);
+
+  /* Type */
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+  --font-sans: "Space Grotesk Variable", "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --notch: polygon(
+    0 4px, 4px 4px, 4px 0,
+    calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+    100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%,
+    4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)
+  );
+
+  /* Depth */
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset, 0 24px 60px -24px rgba(0, 0, 0, 0.8);
+  --glow-purple: 0 0 0 1px var(--line-2), 0 30px 80px -30px rgba(139, 92, 246, 0.55);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Layout */
+  /* viewport-fit=cover means the page runs under rounded corners in landscape. */
+  --gutter: max(clamp(16px, 4vw, 40px), env(safe-area-inset-left), env(safe-area-inset-right));
+  --maxw: 1200px;
+  --nav-h: 68px;
+
+  color-scheme: dark;
+}
