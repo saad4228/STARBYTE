@@ -550,3 +550,41 @@ describe("RoomCore live rooms", () => {
     expect(core.snapshot().playback.status).toBe("playing");
   });
 });
+
+describe("RoomCore leaving live behind", () => {
+  const BROADCAST: MediaFingerprint = {
+    name: "Match night", size: 0, duration: 0, live: true,
+    mime: "", width: 1280, height: 720, sampleHash: "ddddddddddddddddd",
+  };
+  const LINK = { kind: "link" as const, url: "https://cdn.example.com/film.mp4", name: "film.mp4" };
+
+  it("stops being live when the source is cleared", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "source", source: LINK }, 10, new Effects());
+    core.handle(ali.pid, { t: "media", media: BROADCAST }, 20, new Effects());
+    expect(core.snapshot().playback.lag).not.toBeNull();
+
+    core.handle(ali.pid, { t: "source", source: null }, 30, new Effects());
+    expect(core.snapshot().playback.lag).toBeNull();
+  });
+
+  it("stops being live when the room moves to an ordinary file", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: BROADCAST }, 10, new Effects());
+    expect(core.snapshot().playback.lag).not.toBeNull();
+
+    // The room's reference only changes when a controller adopts something else.
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 30, new Effects());
+    core.handle(ali.pid, { t: "adoptMedia" }, 35, new Effects());
+    expect(core.snapshot().media?.live).toBeUndefined();
+    expect(core.snapshot().playback.lag).toBeNull();
+    // ...and a seek works again, which it would not have while the room thought it was live.
+    core.handle(ali.pid, { t: "start" }, 40, new Effects());
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "seek", pos: 100 }, 50, fx);
+    expect(sent(fx, "error")).toHaveLength(0);
+    expect(core.snapshot().playback.position).toBeCloseTo(100, 0);
+  });
+});

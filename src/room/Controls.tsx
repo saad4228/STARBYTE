@@ -189,11 +189,14 @@ function LiveBar() {
   const session = useSession();
   const lag = useRoom((s) => s.sync.lag);
   const roomLag = useRoom((s) => s.room?.playback.lag ?? null);
+  const paused = useRoom((s) => s.room?.playback.status === "paused");
   const control = useRoom(() => session.canControl());
   if (roomLag === null) return null;
 
   const behind = Math.max(0, (lag ?? roomLag) - roomLag);
-  const onEdge = behind <= LIVE_ON_EDGE_S;
+  // Claiming "Live" with a pulsing red dot while the room is paused is a small lie: the
+  // broadcast is carrying on without everyone, which is the opposite of being on the edge.
+  const onEdge = !paused && behind <= LIVE_ON_EDGE_S;
   // How much of the window between the room's position and a long way back we have slipped.
   const slip = Math.min(1, behind / Math.max(roomLag * 2, 20));
 
@@ -201,12 +204,12 @@ function LiveBar() {
     <div className="livebar">
       <span className={cx("livebar__dot", onEdge && "is-live")} aria-hidden="true" />
       <span className="livebar__label">
-        {onEdge ? "Live" : `${formatTime(behind, false)} behind`}
+        {paused ? "Paused · live carries on" : onEdge ? "Live" : `${formatTime(behind, false)} behind`}
       </span>
       <div className="livebar__track" aria-hidden="true">
         <span className="livebar__fill" style={{ right: `${slip * 100}%` }} />
       </div>
-      {!onEdge && (
+      {!onEdge && !paused && (
         <button type="button" className="livebar__catch" onClick={() => session.syncToLive()}>
           Sync to live
         </button>

@@ -573,7 +573,13 @@ export class RoomCore {
       fx.touch("moments");
     }
     this.pendingStartSeq = null;
-    this.setPlayback({ status: "paused", position: 0, anchor: now, started: false }, { pid: p.id, kind: "media" }, fx);
+    // Liveness belongs to the media, so it goes with it. Leaving it set would keep the room
+    // refusing seeks as "live" while it sits there with nothing to play.
+    this.setPlayback(
+      { status: "paused", position: 0, anchor: now, started: false, lag: null },
+      { pid: p.id, kind: "media" },
+      fx,
+    );
     fx.all(this.roomMsg());
     fx.touch("source", "media", "participants");
   }
