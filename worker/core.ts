@@ -1,4 +1,13 @@
-import { LIMITS, MOMENT_DEFAULT_EMOJI, MOMENT_EMOJI, REACTIONS, TIMING } from "../shared/constants";
+import {
+  LIMITS,
+  LIVE_DEFAULT_LAG_S,
+  LIVE_MAX_LAG_S,
+  LIVE_MIN_LAG_S,
+  MOMENT_DEFAULT_EMOJI,
+  MOMENT_EMOJI,
+  REACTIONS,
+  TIMING,
+} from "../shared/constants";
 import { cleanText } from "../shared/format";
 import {
   canControl,
@@ -111,7 +120,7 @@ export function newRoomData(input: {
       settings: { control: input.control, autoStart: "all", pauseOnDisconnect: false, countdown: true },
       lastActivity: input.now,
     },
-    playback: { status: "paused", position: 0, anchor: input.now, rate: 1, seq: 0, started: false },
+    playback: { status: "paused", position: 0, anchor: input.now, rate: 1, seq: 0, started: false, lag: null },
     media: null,
     source: null,
     participants: [],
@@ -133,6 +142,7 @@ export function toPublic(p: ParticipantRecord): ParticipantPublic {
     media: p.media,
     sync: p.sync,
     drift: p.drift,
+    lag: p.lag,
     joinedAt: p.joinedAt,
     call: p.call,
   };
@@ -264,6 +274,7 @@ export class RoomCore {
       media: null,
       sync: "idle",
       drift: null,
+      lag: null,
       joinedAt: now,
       call: null,
       secretHash: input.fresh.secretHash,
@@ -368,7 +379,9 @@ export class RoomCore {
       case "moment":
         return this.onMoment(p, msg.pos, msg.emoji, msg.caption, now, fx);
       case "status":
-        return this.onStatus(p, msg.sync, msg.drift, now, fx);
+        return this.onStatus(p, msg.sync, msg.drift, msg.lag, now, fx);
+      case "lag":
+        return this.onLag(p, msg.lag, now, fx);
       case "settings":
         return this.onSettings(p, msg.name, msg.settings, now, fx);
       case "grant":
@@ -389,7 +402,7 @@ export class RoomCore {
     if (pb.status === "playing") return this.confirm(p, "play", aid, fx);
 
     let position = this.clampPos(pos);
-    if (position >= this.duration() - 0.25) position = 0; // play at the end restarts
+    if (!this.isLive() && position >= this.duration() - 0.25) position = 0; // play at the end restarts
     if (!pb.started) return this.start(now, { pid: p.id, kind: "start", aid }, fx, position);
     this.setPlayback(
       { status: "playing", position, anchor: now + TIMING.resumeLeadMs },
@@ -428,6 +441,16 @@ export class RoomCore {
   private onSeek(p: ParticipantRecord, pos: number, aid: string | undefined, now: number, fx: Effects): void {
     if (!this.take(p.id, "control", now)) return this.rateLimited(p, fx, aid);
     if (!this.requireControl(p, fx, aid) || !this.requireMedia(p, fx, aid)) return;
+    if (this.isLive()) {
+      // There is no position to seek to on a broadcast; the room moves relative to the edge.
+      fx.one(p.id, {
+        t: "error",
+        code: "bad_request",
+        message: "This is live — move the room closer to or further from the live edge instead.",
+        aid,
+      });
+      return;
+    }
 
     const pb = this.data.playback;
     const position = this.clampPos(pos);
@@ -668,16 +691,36 @@ export class RoomCore {
     p: ParticipantRecord,
     sync: ParticipantPublic["sync"],
     drift: number | null,
+    lag: number | null | undefined,
     now: number,
     fx: Effects,
   ): void {
     if (!this.take(p.id, "misc", now)) return;
     const rounded = drift === null ? null : Math.round(Math.max(-864e5, Math.min(864e5, drift)));
-    if (p.sync === sync && p.drift === rounded) return;
+    // A tenth of a second is as fine as anyone needs to see "how far behind am I".
+    const nextLag = lag === undefined ? p.lag : lag === null ? null : Math.round(lag * 10) / 10;
+    if (p.sync === sync && p.drift === rounded && p.lag === nextLag) return;
     p.sync = sync;
     p.drift = rounded;
+    p.lag = nextLag;
     fx.others(p.id, { t: "participant", participant: toPublic(p) });
     fx.touch("participants");
+  }
+
+  /**
+   * Move the whole room closer to or further from the live edge. This is the live equivalent
+   * of a seek: there is no position to agree on, only a shared distance from "now".
+   */
+  private onLag(p: ParticipantRecord, lag: number, now: number, fx: Effects): void {
+    if (!this.take(p.id, "control", now)) return this.rateLimited(p, fx);
+    if (!this.requireControl(p, fx)) return;
+    if (this.data.playback.lag === null) {
+      fx.one(p.id, { t: "error", code: "bad_request", message: "This room isn't watching a live source." });
+      return;
+    }
+    const next = Math.round(Math.max(LIVE_MIN_LAG_S, Math.min(LIVE_MAX_LAG_S, lag)) * 10) / 10;
+    if (next === this.data.playback.lag) return;
+    this.setPlayback({ lag: next }, { pid: p.id, kind: "seek" }, fx);
   }
 
   private onSettings(
@@ -734,7 +777,13 @@ export class RoomCore {
   }
 
   private clampPos(pos: number): number {
+    // Nothing to clamp against on a broadcast: it has no length and no end.
+    if (this.isLive()) return Math.max(0, pos);
     return Math.min(Math.max(0, pos), Math.max(0, this.duration()));
+  }
+
+  private isLive(): boolean {
+    return this.data.playback.lag !== null;
   }
 
   private setPlayback(next: Partial<PlaybackState>, cause: PlaybackCause | null, fx: Effects): void {
@@ -772,13 +821,20 @@ export class RoomCore {
 
   private adopt(p: ParticipantRecord, now: number, fx: Effects): void {
     this.data.media = p.media;
+    // A broadcast has no timeline to agree on, so the room switches to holding a shared
+    // distance behind the edge instead of a shared position.
+    const live = p.media?.live === true;
     if (this.data.moments.length) {
       this.data.moments = []; // moments belong to the previous media's timeline
       fx.all({ t: "moments", moments: [] });
       fx.touch("moments");
     }
     this.pendingStartSeq = null;
-    this.setPlayback({ status: "paused", position: 0, anchor: now, started: false }, { pid: p.id, kind: "media" }, fx);
+    this.setPlayback(
+      { status: "paused", position: 0, anchor: now, started: false, lag: live ? LIVE_DEFAULT_LAG_S : null },
+      { pid: p.id, kind: "media" },
+      fx,
+    );
     for (const other of this.data.participants) {
       if (other !== p && other.ready) {
         other.ready = false;

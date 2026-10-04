@@ -41,6 +41,16 @@ export interface MediaAdapter {
   setPlaybackRate(rate: number): void;
   /** Seconds of media buffered ahead of the playhead. */
   getBuffered(): number;
+  /**
+   * A broadcast rather than a file: no end, and "where are we" is meaningless across viewers
+   * because two people who tuned in at different times hold different numbers for the same
+   * moment. Live rooms are synchronised by how far behind the edge everyone is instead.
+   */
+  isLive(): boolean;
+  /** The newest moment available, in this player's own timebase. Only meaningful when live. */
+  getLiveEdge(): number;
+  /** Whether seeking works at all — a plain live stream often cannot be scrubbed. */
+  canSeek(): boolean;
   isPaused(): boolean;
   isSeeking(): boolean;
   isBuffering(): boolean;

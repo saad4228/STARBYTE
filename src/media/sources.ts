@@ -127,9 +127,12 @@ function resolveDrive(url: URL): ResolvedSource {
 }
 
 export interface SourceProbe {
+  /** Zero for a live source, which has no length. */
   duration: number;
   width: number;
   height: number;
+  /** A broadcast with no end. */
+  live?: boolean;
 }
 
 /**
@@ -141,8 +144,8 @@ export async function probeSource(url: string, timeoutMs = 20_000): Promise<Sour
   const parsed = safeUrl(url);
   const youtube = parsed && parseYouTubeId(parsed);
   if (youtube) {
-    const { duration } = await probeYouTube(youtube);
-    return { duration, width: 0, height: 0 };
+    const { duration, live } = await probeYouTube(youtube);
+    return { duration: live ? 0 : duration, width: 0, height: 0, ...(live ? { live: true } : {}) };
   }
   return probeFile(url, timeoutMs);
 }
@@ -176,10 +179,18 @@ function probeFile(url: string, timeoutMs: number): Promise<SourceProbe> {
     };
     const ok = () => {
       const duration = v.duration;
-      const probe = { duration, width: v.videoWidth, height: v.videoHeight };
+      // No end means a broadcast. The room then syncs to the live edge rather than to a
+      // position, so this is a source in its own right and not a failure.
+      const live = duration === Infinity;
+      const probe: SourceProbe = {
+        duration: live ? 0 : duration,
+        width: v.videoWidth,
+        height: v.videoHeight,
+        ...(live ? { live: true } : {}),
+      };
       done(() => {
-        if (!Number.isFinite(duration) || duration <= 0) {
-          reject(new SourceError("That link opened, but it has no fixed length — live streams can't be synced yet."));
+        if (!live && (!Number.isFinite(duration) || duration <= 0)) {
+          reject(new SourceError("That link opened, but the player could not work out how long it is."));
         } else {
           resolve(probe);
         }
@@ -221,7 +232,7 @@ export async function sourceFingerprint(
   probe: SourceProbe,
 ): Promise<MediaFingerprint> {
   const hash = await sha256Hex(`starbyte-source:${source.url}`);
-  return {
+  const fp: MediaFingerprint = {
     name: source.name,
     size: 0,
     duration: probe.duration,
@@ -230,4 +241,6 @@ export async function sourceFingerprint(
     height: probe.height,
     sampleHash: hash.slice(0, 32),
   };
+  if (probe.live) fp.live = true;
+  return fp;
 }

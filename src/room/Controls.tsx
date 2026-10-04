@@ -13,7 +13,14 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
-import { MOMENT_DEFAULT_EMOJI, MOMENT_EMOJI, PLAYBACK_RATES, REACTIONS } from "../../shared/constants";
+import {
+  LIVE_MIN_LAG_S,
+  LIVE_ON_EDGE_S,
+  MOMENT_DEFAULT_EMOJI,
+  MOMENT_EMOJI,
+  PLAYBACK_RATES,
+  REACTIONS,
+} from "../../shared/constants";
 import { formatPrecise, formatTime } from "../../shared/format";
 import type { RoomMoment } from "../../shared/protocol";
 import { cx } from "../lib/cx";
@@ -85,6 +92,7 @@ export function Controls({ stageRef }: { stageRef: RefObject<HTMLDivElement | nu
   const target = useRoom((s) => s.sync.target);
   const phase = useRoom((s) => s.sync.phase);
   const buffered = useRoom((s) => s.sync.buffered);
+  const live = useRoom((s) => s.sync.live);
   const playing = useRoom((s) => (s.pending?.playback ?? s.room?.playback)?.status === "playing");
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -103,14 +111,18 @@ export function Controls({ stageRef }: { stageRef: RefObject<HTMLDivElement | nu
 
   return (
     <div className="controls">
-      <SeekBar
-        position={position}
-        duration={duration}
-        buffered={buffered}
-        moments={room.moments}
-        disabled={!control || !room.media}
-        onSeek={(t) => session.seek(t)}
-      />
+      {live ? (
+        <LiveBar />
+      ) : (
+        <SeekBar
+          position={position}
+          duration={duration}
+          buffered={buffered}
+          moments={room.moments}
+          disabled={!control || !room.media}
+          onSeek={(t) => session.seek(t)}
+        />
+      )}
       <div className="controls__row">
         <div className="controls__group">
           <button
@@ -123,17 +135,25 @@ export function Controls({ stageRef }: { stageRef: RefObject<HTMLDivElement | nu
           >
             {playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
           </button>
-          <button type="button" className="ibtn hide-sm" onClick={() => session.seekBy(-10)} disabled={!control} aria-label="Back 10 seconds (←)">
-            <RotateCcw />
-          </button>
-          <button type="button" className="ibtn hide-sm" onClick={() => session.seekBy(10)} disabled={!control} aria-label="Forward 10 seconds (→)">
-            <RotateCw />
-          </button>
+          {!live && (
+            <>
+              <button type="button" className="ibtn hide-sm" onClick={() => session.seekBy(-10)} disabled={!control} aria-label="Back 10 seconds (←)">
+                <RotateCcw />
+              </button>
+              <button type="button" className="ibtn hide-sm" onClick={() => session.seekBy(10)} disabled={!control} aria-label="Forward 10 seconds (→)">
+                <RotateCw />
+              </button>
+            </>
+          )}
           <VolumeControl />
-          <span className="controls__time tnum">
-            {formatTime(position, long)}
-            <i> / {formatTime(duration, long)}</i>
-          </span>
+          {live ? (
+            <LiveClock />
+          ) : (
+            <span className="controls__time tnum">
+              {formatTime(position, long)}
+              <i> / {formatTime(duration, long)}</i>
+            </span>
+          )}
         </div>
 
         <div className="controls__group controls__group--social">
@@ -157,6 +177,68 @@ export function Controls({ stageRef }: { stageRef: RefObject<HTMLDivElement | nu
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * What stands in for the scrubber on a broadcast. There is no timeline to drag along, so the
+ * bar shows the one thing that is true: how far behind the newest moment you are, and how far
+ * behind the room has chosen to sit.
+ */
+function LiveBar() {
+  const session = useSession();
+  const lag = useRoom((s) => s.sync.lag);
+  const roomLag = useRoom((s) => s.room?.playback.lag ?? null);
+  const control = useRoom(() => session.canControl());
+  if (roomLag === null) return null;
+
+  const behind = Math.max(0, (lag ?? roomLag) - roomLag);
+  const onEdge = behind <= LIVE_ON_EDGE_S;
+  // How much of the window between the room's position and a long way back we have slipped.
+  const slip = Math.min(1, behind / Math.max(roomLag * 2, 20));
+
+  return (
+    <div className="livebar">
+      <span className={cx("livebar__dot", onEdge && "is-live")} aria-hidden="true" />
+      <span className="livebar__label">
+        {onEdge ? "Live" : `${formatTime(behind, false)} behind`}
+      </span>
+      <div className="livebar__track" aria-hidden="true">
+        <span className="livebar__fill" style={{ right: `${slip * 100}%` }} />
+      </div>
+      {!onEdge && (
+        <button type="button" className="livebar__catch" onClick={() => session.syncToLive()}>
+          Sync to live
+        </button>
+      )}
+      {control && (
+        <label className="livebar__delay">
+          <span className="visually-hidden">Room delay behind live, in seconds</span>
+          <input
+            type="range"
+            className="range"
+            min={LIVE_MIN_LAG_S}
+            max={60}
+            step={1}
+            value={Math.min(60, roomLag)}
+            onChange={(e) => session.setLiveLag(Number(e.target.value))}
+            aria-label="Room delay behind live"
+          />
+          <span className="livebar__delay-value tnum">{Math.round(roomLag)}s</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Live has no elapsed/total, so the clock shows the room's distance from the edge. */
+function LiveClock() {
+  const roomLag = useRoom((s) => s.room?.playback.lag ?? null);
+  if (roomLag === null) return null;
+  return (
+    <span className="controls__time tnum" title="How far behind the live edge the room is holding">
+      <i>−{Math.round(roomLag)}s</i>
+    </span>
   );
 }
 
@@ -409,8 +491,16 @@ export function SyncIndicator() {
   } else {
     switch (sync.phase) {
       case "synced":
-        label = "Synced";
-        detail = `${drift ?? 0}ms`;
+        // Live has no shared position, so milliseconds against one would be meaningless —
+        // and on a stream that cannot be rewound the figure never reaches zero. What the
+        // viewer actually wants to know is how far behind the broadcast they are.
+        if (sync.live) {
+          label = "Live";
+          detail = sync.lag === null ? "" : `${sync.lag.toFixed(1)}s behind`;
+        } else {
+          label = "Synced";
+          detail = `${drift ?? 0}ms`;
+        }
         break;
       case "paused":
         label = "Synced · paused";

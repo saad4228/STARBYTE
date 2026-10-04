@@ -59,6 +59,18 @@ export const MOMENT_EMOJI: readonly string[] = [...REACTIONS, "✦"];
 
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
+/**
+ * Live rooms hold this far behind the edge by default. Far enough that an ordinary buffering
+ * hiccup does not drop a viewer out of the window, close enough that nobody feels posted to
+ * yesterday — and it is the room's number, so everyone shares the same delay.
+ */
+export const LIVE_DEFAULT_LAG_S = 8;
+/** How close to the edge a controller may pull the room. */
+export const LIVE_MIN_LAG_S = 2;
+export const LIVE_MAX_LAG_S = 120;
+/** Within this of the room's target, a viewer counts as "on the live edge". */
+export const LIVE_ON_EDGE_S = 2.5;
+
 /** Two files whose durations differ by more than this are treated as different media. */
 export const DURATION_TOLERANCE_S = 2;
 

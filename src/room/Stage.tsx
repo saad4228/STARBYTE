@@ -192,7 +192,10 @@ function Bubbles() {
                 ? { tone: "warn" as const, text: "Catching up" }
                 : !p.media
                   ? { tone: "idle" as const, text: "No media yet" }
-                  : { tone: "ok" as const, text: p.drift !== null && p.sync === "synced" ? `Synced ${Math.abs(p.drift)}ms` : "Synced" };
+                  : room.playback.lag !== null
+                    ? // Live: how far behind the broadcast, since there is no shared position.
+                      { tone: "ok" as const, text: p.lag === null ? "Live" : `${p.lag.toFixed(1)}s behind live` }
+                    : { tone: "ok" as const, text: p.drift !== null && p.sync === "synced" ? `Synced ${Math.abs(p.drift)}ms` : "Synced" };
         const inCall = !!p.call?.on && p.online;
         const stream = inCall ? streamOf(p.id) : null;
         const status = p.id === me ? null : peerStatus(p.id);

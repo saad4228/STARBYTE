@@ -184,7 +184,7 @@ function createPlayer(
 }
 
 /** Read a video's length (and prove it is embeddable) without showing anything. */
-export async function probeYouTube(videoId: string): Promise<{ duration: number }> {
+export async function probeYouTube(videoId: string): Promise<{ duration: number; live: boolean }> {
   const api = await loadYouTubeApi();
   const host = document.createElement("div");
   // Off screen rather than display:none — a hidden player may refuse to load metadata.
@@ -213,9 +213,14 @@ export async function probeYouTube(videoId: string): Promise<{ duration: number 
     }
     if (late) throw new YouTubeError(late);
     if (!Number.isFinite(duration) || duration <= 0) {
-      throw new YouTubeError("That video has no fixed length — a live stream can't be synchronised yet.");
+      throw new YouTubeError("YouTube would not say how long that video is.");
     }
-    return { duration };
+    // A broadcast's "duration" is the end of its DVR window, so it keeps growing. A recording's
+    // does not. Watching it for a moment is the only way the player will tell us which it is.
+    await new Promise((r) => setTimeout(r, 1100));
+    const later = player.getDuration();
+    const live = Number.isFinite(later) && later > duration + 0.4;
+    return { duration: live ? 0 : duration, live };
   } finally {
     try {
       player?.destroy();
@@ -243,6 +248,7 @@ export class YouTubeAdapter implements MediaAdapter {
   constructor(
     private readonly videoId: string,
     private readonly fallbackDuration = 0,
+    private readonly live = false,
   ) {
     const el = document.createElement("div");
     el.className = "stage__video stage__yt";
@@ -344,6 +350,20 @@ export class YouTubeAdapter implements MediaAdapter {
     const duration = this.getDuration();
     if (duration <= 0) return 0;
     return Math.max(0, player.getVideoLoadedFraction() * duration - player.getCurrentTime());
+  }
+
+  isLive(): boolean {
+    return this.live;
+  }
+
+  /** For a YouTube broadcast the reported duration is the end of its DVR window. */
+  getLiveEdge(): number {
+    const d = this.player?.getDuration() ?? 0;
+    return Number.isFinite(d) && d > 0 ? d : this.getCurrentTime();
+  }
+
+  canSeek(): boolean {
+    return true; // YouTube allows scrubbing inside the DVR window
   }
 
   isPaused(): boolean {

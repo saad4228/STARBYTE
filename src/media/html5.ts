@@ -85,8 +85,12 @@ export class Html5MediaAdapter implements MediaAdapter {
   }
 
   seek(time: number): void {
+    // Assigning a non-finite currentTime throws, and on a live stream the arithmetic that
+    // produces a target can legitimately reach Infinity before the edge is known.
+    if (!Number.isFinite(time)) return;
     const duration = this.getDuration();
-    this.element.currentTime = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
+    const limit = Number.isFinite(duration) && duration > 0 ? Math.min(time, duration) : time;
+    this.element.currentTime = Math.max(0, limit);
   }
 
   getCurrentTime(): number {
@@ -113,6 +117,36 @@ export class Html5MediaAdapter implements MediaAdapter {
       if (v.buffered.start(i) <= t + 0.05 && v.buffered.end(i) >= t) return v.buffered.end(i) - t;
     }
     return 0;
+  }
+
+  isLive(): boolean {
+    return this.element.duration === Infinity;
+  }
+
+  /**
+   * With a DVR window the edge is the end of `seekable`. A plain progressive stream exposes no
+   * seekable range at all, so the newest thing that has arrived is the end of `buffered`.
+   */
+  getLiveEdge(): number {
+    const v = this.element;
+    // An unbounded stream can report its seekable range as ending at Infinity, which is true
+    // and useless: seeking there throws. Only a real number can be an edge, so fall through
+    // to what has actually arrived.
+    const seekable = v.seekable.length ? v.seekable.end(v.seekable.length - 1) : NaN;
+    if (Number.isFinite(seekable)) return seekable;
+    const buffered = v.buffered.length ? v.buffered.end(v.buffered.length - 1) : NaN;
+    if (Number.isFinite(buffered)) return buffered;
+    return v.currentTime;
+  }
+
+  canSeek(): boolean {
+    const v = this.element;
+    if (!this.isLive()) return true;
+    if (!v.seekable.length) return false;
+    const end = v.seekable.end(v.seekable.length - 1);
+    // A range ending at Infinity is a claim the browser cannot honour, and a one-sample range
+    // is it saying "here and nowhere else".
+    return Number.isFinite(end) && end - v.seekable.start(0) > 1;
   }
 
   isPaused(): boolean {

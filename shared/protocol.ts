@@ -35,13 +35,24 @@ export interface PlaybackState {
   seq: number;
   /** False until the first start — the room is still in its ready check. */
   started: boolean;
+  /**
+   * Live rooms only. How many seconds behind the live edge the room is holding.
+   *
+   * A broadcast has no shared timeline: two viewers who tuned in at different moments hold
+   * completely different numbers for the same frame, so `position` means nothing between
+   * them. What everyone can agree on is the distance from the newest moment available. Null
+   * for ordinary media, where `position` and `anchor` govern.
+   */
+  lag: number | null;
 }
 
 export interface MediaFingerprint {
   name: string;
   size: number;
-  /** Seconds, always finite. */
+  /** Seconds. Zero for a live source, which has no length. */
   duration: number;
+  /** A broadcast with no end. Durations and positions do not compare across viewers. */
+  live?: boolean;
   mime: string;
   width: number;
   height: number;
@@ -107,6 +118,8 @@ export interface ParticipantPublic {
   sync: SyncStatus;
   /** Last reported drift in ms (positive = ahead of the room). */
   drift: number | null;
+  /** Live rooms: how far behind the live edge this viewer actually is, in seconds. */
+  lag: number | null;
   joinedAt: number;
   call: CallState | null;
 }
@@ -206,7 +219,9 @@ export type ClientMessage =
   | { t: "chat"; text: string }
   | { t: "react"; emoji: string }
   | { t: "moment"; pos: number; emoji: string; caption: string }
-  | { t: "status"; sync: SyncStatus; drift: number | null }
+  | { t: "status"; sync: SyncStatus; drift: number | null; lag?: number | null }
+  /** Live rooms: a controller moves the whole room closer to, or further from, the edge. */
+  | { t: "lag"; lag: number }
   | { t: "settings"; name?: string; settings?: Partial<RoomSettings> }
   | { t: "grant"; pid: string; control: boolean }
   | { t: "leave" };

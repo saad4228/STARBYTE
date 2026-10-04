@@ -630,6 +630,7 @@ export class RoomSession {
     const s = this.store.get();
     const pb = this.playback();
     if (!pb || !s.room?.media) return;
+    if (pb.lag !== null) return; // live: nothing to seek to
     const pos = Math.min(Math.max(0, position), s.room.media.duration);
     const now = this.clock.serverNow();
     const lead = pb.status === "playing" ? Math.max(pb.anchor - now, TIMING.resumeLeadMs) : 0;
@@ -770,6 +771,35 @@ export class RoomSession {
     this.patchMedia({ fingerprint });
     this.send({ t: "media", media: fingerprint });
     this.engine.poke();
+  }
+
+  // ── Live ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Catch this viewer up to the room's live edge. Local, not room-wide: falling behind is a
+   * personal problem — a buffer stall, a slow network — and the rest of the room should not be
+   * dragged backwards because one person's connection hiccupped.
+   */
+  syncToLive(): void {
+    const { media, room } = this.store.get();
+    const lag = room?.playback.lag;
+    if (!media || lag === null || lag === undefined) return;
+    if (!media.adapter.isLive()) return;
+    if (!media.adapter.canSeek()) {
+      // Nothing to seek on a plain stream; the engine closes the gap by playing faster.
+      this.toast("info", "This stream can't be skipped forward — catching up gradually instead.");
+      this.engine.poke();
+      return;
+    }
+    media.adapter.seek(Math.max(0, media.adapter.getLiveEdge() - lag));
+    this.engine.poke();
+  }
+
+  /** Move the whole room nearer to or further from the edge. Needs control. */
+  setLiveLag(lag: number): void {
+    if (!this.guardControl()) return;
+    if (this.store.get().room?.playback.lag === null) return;
+    this.send({ t: "lag", lag });
   }
 
   // ── Shared sources (Drive / link) ─────────────────────────────────────────
@@ -1112,7 +1142,11 @@ export class RoomSession {
     this.statusTimer = window.setTimeout(() => {
       this.statusTimer = 0;
       const current = this.syncStatus();
-      if (current !== this.lastStatus && this.send({ t: "status", sync: current, drift: this.store.get().sync.drift })) {
+      const snap = this.store.get().sync;
+      // Drift is measured against a shared position, which a broadcast does not have; lag
+      // carries the equivalent information there.
+      const drift = snap.live ? null : snap.drift;
+      if (current !== this.lastStatus && this.send({ t: "status", sync: current, drift, lag: snap.lag })) {
         this.lastStatus = current;
       }
     }, 1500);

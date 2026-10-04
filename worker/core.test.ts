@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, TIMING } from "../shared/constants";
+import { LIMITS, LIVE_DEFAULT_LAG_S, LIVE_MAX_LAG_S, LIVE_MIN_LAG_S, TIMING } from "../shared/constants";
 import type { MediaFingerprint, ServerMessage } from "../shared/protocol";
 import { Effects, RoomCore, newRoomData, type HelloInput } from "./core";
 
@@ -456,5 +456,97 @@ describe("RoomCore duration corrections", () => {
     core.handle(ali.pid, { t: "media", media: MOVIE }, 40, new Effects());
     core.handle(ali.pid, { t: "seek", pos: 400 }, 50, new Effects());
     expect(core.snapshot().playback.position).toBeCloseTo(400, 0);
+  });
+});
+
+describe("RoomCore live rooms", () => {
+  const BROADCAST: MediaFingerprint = {
+    name: "Match night",
+    size: 0,
+    duration: 0,
+    live: true,
+    mime: "",
+    width: 1280,
+    height: 720,
+    sampleHash: "ccccccccccccccccc",
+  };
+
+  function liveRoom() {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: BROADCAST }, 10, new Effects());
+    return { core, ali };
+  }
+
+  it("switches the room to holding a distance behind the edge", () => {
+    const { core } = liveRoom();
+    expect(core.snapshot().playback.lag).toBe(LIVE_DEFAULT_LAG_S);
+    expect(core.snapshot().media?.live).toBe(true);
+  });
+
+  it("leaves ordinary media on a timeline", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    expect(core.snapshot().playback.lag).toBeNull();
+  });
+
+  it("moves the whole room nearer the edge", () => {
+    const { core, ali } = liveRoom();
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "lag", lag: 4 }, 20, fx);
+    expect(core.snapshot().playback.lag).toBe(4);
+    expect(sent(fx, "playback")).toHaveLength(1);
+  });
+
+  it("keeps the delay inside sane bounds", () => {
+    const { core, ali } = liveRoom();
+    core.handle(ali.pid, { t: "lag", lag: 0 }, 20, new Effects());
+    expect(core.snapshot().playback.lag).toBe(LIVE_MIN_LAG_S);
+    core.handle(ali.pid, { t: "lag", lag: 99_999 }, 30, new Effects());
+    expect(core.snapshot().playback.lag).toBe(LIVE_MAX_LAG_S);
+  });
+
+  it("refuses a viewer without control", () => {
+    const core = makeRoom("host");
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: BROADCAST }, 10, new Effects());
+    const bo = join(core, "Bo");
+    const fx = new Effects();
+    core.handle(bo.pid, { t: "lag", lag: 3 }, 20, fx);
+    expect(core.snapshot().playback.lag).toBe(LIVE_DEFAULT_LAG_S);
+    expect(sent(fx, "error")).toHaveLength(1);
+  });
+
+  it("refuses a seek, because a broadcast has no position to seek to", () => {
+    const { core, ali } = liveRoom();
+    core.handle(ali.pid, { t: "start" }, 20, new Effects());
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "seek", pos: 500 }, 30, fx);
+    expect(core.snapshot().playback.position).toBe(0);
+    expect(sent(fx, "error")[0]).toMatchObject({ code: "bad_request" });
+  });
+
+  it("refuses a delay change in a room that is not live", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "lag", lag: 5 }, 20, fx);
+    expect(sent(fx, "error")).toHaveLength(1);
+  });
+
+  it("records how far behind each viewer actually is", () => {
+    const { core, ali } = liveRoom();
+    core.handle(ali.pid, { t: "status", sync: "synced", drift: 0, lag: 3.27 }, 20, new Effects());
+    expect(core.find(ali.pid)?.lag).toBe(3.3);
+  });
+
+  it("never ends a broadcast — it has no end to reach", () => {
+    const { core, ali } = liveRoom();
+    core.handle(ali.pid, { t: "start" }, 20, new Effects());
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "ended" }, 10_000_000, fx);
+    expect(core.snapshot().playback.status).toBe("playing");
   });
 });

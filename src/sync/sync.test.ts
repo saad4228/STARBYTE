@@ -86,3 +86,30 @@ describe("ServerClock", () => {
     ).toBe(50);
   });
 });
+
+describe("drift policy for live sources", () => {
+  /** What the engine substitutes for a broadcast: a wider band, and the rate as the main tool. */
+  const dvr = { ...DEFAULT_DRIFT, gentle: true, deadbandMs: 500, hardMs: 5000, maxAdjust: 0.08 };
+  /** A stream with no DVR cannot be seeked at all, so a jump is never an option. */
+  const noDvr = { ...dvr, hardMs: Number.POSITIVE_INFINITY };
+
+  it("ignores the jitter of a live edge that a file would correct for", () => {
+    // A third of a second would be a nudge on a file; on a broadcast it is just the edge moving.
+    expect(decideDrift(0.3, 1, false, DEFAULT_DRIFT).kind).toBe("nudge");
+    expect(decideDrift(0.3, 1, false, dvr)).toEqual({ kind: "hold", rate: 1 });
+  });
+
+  it("corrects a real slip, harder than it would on a file", () => {
+    expect(decideDrift(-1.2, 1, false, dvr)).toEqual({ kind: "nudge", rate: 1.08 });
+  });
+
+  it("still jumps when a DVR window makes seeking possible", () => {
+    expect(decideDrift(-30, 1, false, dvr)).toEqual({ kind: "jump" });
+  });
+
+  it("never jumps on a stream that cannot be rewound", () => {
+    // The data behind the edge is simply not there, so the rate is the only tool left.
+    expect(decideDrift(-30, 1, false, noDvr)).toEqual({ kind: "nudge", rate: 1.08 });
+    expect(decideDrift(300, 1, false, noDvr).kind).not.toBe("jump");
+  });
+});

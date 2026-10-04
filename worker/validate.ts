@@ -30,7 +30,10 @@ export function parseFingerprint(v: unknown): MediaFingerprint | null {
   const name = cleanText(v.name, 160);
   if (!name) return null;
   if (!isNum(v.size) || v.size < 0 || v.size > Number.MAX_SAFE_INTEGER) return null;
-  if (!isNum(v.duration) || v.duration <= 0 || v.duration > 7 * 24 * 3600) return null;
+  // A live source has no length, so zero is the honest value there and only there.
+  const live = v.live === true;
+  if (!isNum(v.duration) || v.duration < 0 || v.duration > 7 * 24 * 3600) return null;
+  if (!live && v.duration <= 0) return null;
   if (typeof v.sampleHash !== "string" || !HEX.test(v.sampleHash)) return null;
 
   const dim = (x: unknown) => (isNum(x) ? Math.max(0, Math.min(16384, Math.round(x))) : 0);
@@ -43,6 +46,7 @@ export function parseFingerprint(v: unknown): MediaFingerprint | null {
     height: dim(v.height),
     sampleHash: v.sampleHash,
   };
+  if (live) fp.live = true;
   if (typeof v.fullHash === "string" && HEX.test(v.fullHash)) fp.fullHash = v.fullHash;
   const videoCodec = cleanText(v.videoCodec, 32);
   if (videoCodec) fp.videoCodec = videoCodec;
@@ -155,9 +159,18 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         emoji: typeof v.emoji === "string" ? v.emoji : "",
         caption: typeof v.caption === "string" ? v.caption.slice(0, 1000) : "",
       };
-    case "status":
+    case "status": {
       if (typeof v.sync !== "string" || !SYNC_STATUSES.has(v.sync)) return null;
-      return { t: "status", sync: v.sync as SyncStatus, drift: isNum(v.drift) ? v.drift : null };
+      const out: Extract<ClientMessage, { t: "status" }> = {
+        t: "status",
+        sync: v.sync as SyncStatus,
+        drift: isNum(v.drift) ? v.drift : null,
+      };
+      if (v.lag !== undefined) out.lag = isNum(v.lag) ? Math.max(0, Math.min(86_400, v.lag)) : null;
+      return out;
+    }
+    case "lag":
+      return isNum(v.lag) ? { t: "lag", lag: v.lag } : null;
     case "settings": {
       const out: Extract<ClientMessage, { t: "settings" }> = { t: "settings" };
       if (typeof v.name === "string") out.name = v.name.slice(0, 200);

@@ -29,6 +29,12 @@ export interface SyncSnapshot {
   duration: number;
   /** Playback was muted to satisfy the autoplay policy; the UI offers "tap to unmute". */
   autoMuted: boolean;
+  /** This room is watching a broadcast: there is an edge rather than a timeline. */
+  live: boolean;
+  /** Live only: seconds this viewer is behind their own live edge. */
+  lag: number | null;
+  /** Live only: the newest moment available, in the player's timebase. */
+  edge: number;
 }
 
 export const IDLE_SNAPSHOT: SyncSnapshot = {
@@ -42,6 +48,9 @@ export const IDLE_SNAPSHOT: SyncSnapshot = {
   buffered: 0,
   duration: 0,
   autoMuted: false,
+  live: false,
+  lag: null,
+  edge: 0,
 };
 
 export interface EngineDeps {
@@ -140,7 +149,19 @@ export class SyncEngine {
     const duration = a.getDuration();
     const end = duration > 0 ? duration : Number.POSITIVE_INFINITY;
     const local = a.getCurrentTime();
-    const target = Math.min(Math.max(0, positionAt(pb, now)), end);
+    /**
+     * A live room has no shared position to aim at — two viewers who tuned in at different
+     * moments hold different numbers for the same frame. What they can share is a distance
+     * behind the newest moment each of them has, so the target is measured from the edge.
+     */
+    const live = pb.lag !== null && a.isLive();
+    const edge = live ? a.getLiveEdge() : 0;
+    const liveTarget = Math.max(0, edge - (pb.lag ?? 0));
+    const target = live
+      ? // Before the first segments land there is no edge yet; stay where we are rather than
+        // aiming at a number that is not one.
+        (Number.isFinite(liveTarget) ? liveTarget : local)
+      : Math.min(Math.max(0, positionAt(pb, now)), end);
     const emit = (phase: SyncPhase, extra: Partial<SyncSnapshot> = {}) =>
       this.deps.onSnapshot({
         phase,
@@ -153,6 +174,9 @@ export class SyncEngine {
         buffered: a.getBuffered(),
         duration,
         autoMuted: this.autoMuted,
+        live,
+        lag: live && Number.isFinite(edge) ? Math.max(0, edge - local) : null,
+        edge: Number.isFinite(edge) ? edge : 0,
         ...extra,
       });
 
@@ -160,7 +184,9 @@ export class SyncEngine {
       clearTimeout(this.startTimer);
       if (!a.isPaused()) a.pause();
       this.applyRate(pb.rate);
-      if (Math.abs(local - target) > PAUSED_TOLERANCE_S && !a.isSeeking()) a.seek(target);
+      // Parking on the target frame only makes sense where there is one. A paused broadcast
+      // keeps running without us; we rejoin at the edge when the room resumes.
+      if (!live && Math.abs(local - target) > PAUSED_TOLERANCE_S && !a.isSeeking()) a.seek(target);
       return emit(pb.started ? "paused" : "lobby");
     }
 
@@ -184,7 +210,7 @@ export class SyncEngine {
       return emit("countdown", { countdownMs: remaining, drift: null });
     }
 
-    if (target >= end - 0.05) {
+    if (!live && target >= end - 0.05) {
       if (this.endedForSeq !== pb.seq) {
         this.endedForSeq = pb.seq;
         this.deps.onEnded();
@@ -202,12 +228,36 @@ export class SyncEngine {
     if (performance.now() < this.cooldownUntil) return emit("catching_up", { correction: "jump" });
 
     const drift = local - target;
+    /**
+     * A stream with no DVR cannot be made to sit further back than it already is — the older
+     * data simply is not there to rewind into. Sitting closer to the edge than the room's
+     * nominal delay is then the best available position, not an error, and deliberately
+     * slowing everyone down for a minute to manufacture the gap would be worse than useless.
+     * Only falling behind is worth correcting.
+     */
+    if (live && !a.canSeek() && drift > 0) {
+      this.correcting = false;
+      this.applyRate(pb.rate);
+      return emit("synced");
+    }
     let cfg = this.deps.getConfig();
     // An embedded player reports its position in coarse steps and only accepts a fixed menu
     // of speeds. Chasing 40ms there would mean nudging the rate against measurement noise
     // forever, so widen the band and correct by seeking instead.
     if (a.precision === "coarse") {
       cfg = { ...cfg, gentle: false, deadbandMs: Math.max(cfg.deadbandMs, 400), hardMs: Math.max(cfg.hardMs, 1200) };
+    }
+    if (live) {
+      // The edge itself jitters as segments arrive, so chasing it tightly would mean seeking
+      // every few seconds. Hold a loose band and let the rate do the work — and where the
+      // stream cannot be scrubbed at all, the rate is the only tool there is.
+      cfg = {
+        ...cfg,
+        gentle: true,
+        deadbandMs: Math.max(cfg.deadbandMs, 500),
+        hardMs: a.canSeek() ? Math.max(cfg.hardMs, 5000) : Number.POSITIVE_INFINITY,
+        maxAdjust: Math.max(cfg.maxAdjust, 0.08),
+      };
     }
     const settling = now - pb.anchor < SETTLE_MS;
     const decision = decideDrift(

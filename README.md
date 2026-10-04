@@ -242,6 +242,37 @@ people arrive, and a salted IP hash caps how much one network can add in a day.
 
 ---
 
+## Live mode
+
+A broadcast breaks the assumption everything else rests on. There is no timeline: the stream has
+no end, and two people who tuned in at different moments hold completely different numbers for the
+same frame. "Everyone to position 412.5" is meaningless.
+
+What they can agree on is **distance from the newest moment available**. So a live room replaces
+`position` with `lag` — how many seconds behind the live edge the room is holding — and each
+viewer targets `their own edge − lag`. Because every edge is roughly the same real-world instant,
+holding a common distance puts everyone on the same frame. `PlaybackState.lag` is null for
+ordinary media and a number for a broadcast; that one field is what the whole mode turns on.
+
+Three things follow, and each one bit during the build:
+
+- **The edge is not always a number.** An unbounded stream can report `seekable.end` as
+  `Infinity`, which is true and useless — assigning it to `currentTime` throws. `getLiveEdge`
+  falls through to `buffered.end` and then to `currentTime`, and only ever returns a real number.
+- **Some live streams cannot be rewound at all.** A plain progressive stream exposes no seekable
+  range, so a viewer physically cannot sit further back than they already are: the older data is
+  not there. Being *closer* to the edge than the room's nominal delay is then the best available
+  position, not an error — correcting it would mean slowing everyone to 0.92× for a minute to
+  manufacture a gap. The engine only corrects a live viewer who has fallen behind.
+- **Drift against a position is the wrong readout.** It never reaches zero on a stream that cannot
+  be rewound, so "Synced 1716ms" sat on screen permanently. Live rooms report lag instead: the
+  indicator says "Live · 2.3s behind", and the per-viewer badges say how far behind each person is.
+
+Seeking is refused server-side in a live room, the countdown and "ended" paths are skipped, and a
+controller moves the whole room nearer the edge with `{ t: "lag" }` — the live equivalent of a seek.
+"Sync to live" is deliberately local: falling behind is a personal buffering problem, and the rest
+of the room should not be dragged backwards because one connection hiccupped.
+
 ## Why duration is measured twice
 
 A file's length is read once before playback, by a detached probe, and frozen into the
@@ -311,7 +342,7 @@ make such scripts easy; it is stripped from production builds.
 - **V2 (shipped):** Google Drive, direct stream URLs, and YouTube through the official IFrame
   player (`src/media/youtube.ts`) — each a `MediaAdapter`, so the sync engine never learns where
   the picture came from.
-- **V3:** Live mode (live edge instead of a timeline, "sync to live room"), sports UI, deeper telemetry.
+- **V3 (shipped):** Live mode — a live edge instead of a timeline, a shared delay behind it, and one tap to catch up. Still open: the sports scoreboard UI and deeper telemetry.
 
 A render error or a lazily-imported chunk that 404s (a deploy landing while someone has the page
 open) is caught by the error boundary in `src/app/ErrorBoundary.tsx`, which tells the two apart —
@@ -332,6 +363,7 @@ page.
 - **Google Drive throttles direct playback.** Large files get an interstitial scan page instead of
   the video, and Drive enforces its own daily bandwidth quota per file. The host sees this as a
   failed check before the link ever reaches the room, not as a broken room.
+- **Live streams cannot be scrubbed unless the source offers a DVR window.** Without one the only correction available is playing slightly faster, so a viewer who stalls catches up over seconds rather than instantly — and the room's delay setting has no effect, because the data to sit further back in does not exist.
 - **HLS (.m3u8) only plays where the browser plays it natively** — Safari and iOS. Chrome and Firefox
   need a direct MP4/WebM. DASH is not supported at all.
 - **YouTube is their player, not ours.** Videos whose owners disable embedding (most music videos

@@ -70,7 +70,7 @@ export function LiveSection() {
                 Movie night. Match night. <em>Any night.</em>
               </>
             }
-            sub="Live sources sync around the live edge — not a pretend movie timeline."
+            sub="Live sources sync around the live edge — not a pretend movie timeline. Paste a stream and the room holds everyone the same distance behind it."
           />
           <ul className="live__points reveal">
             <li>A real ● LIVE edge instead of a scrubber</li>
@@ -79,7 +79,7 @@ export function LiveSection() {
           </ul>
           <div className="live__foot reveal">
             <Mascot pose="scarf" scale={4} className="live__mascot" />
-            <Chip tone="soon">Live mode · on the roadmap</Chip>
+            <Chip tone="live">Live mode · available</Chip>
           </div>
         </div>
 
