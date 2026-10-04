@@ -80,8 +80,15 @@ describe("source links", () => {
     expect(src("https://user:pass@cdn.example.com/a.mp4")).toBeNull();
   });
 
-  it("refuses an unknown source kind and over-long URLs", () => {
-    expect(src("https://cdn.example.com/a.mp4", "youtube")).toBeNull();
+  it("accepts the three source kinds and refuses anything else", () => {
+    for (const kind of ["link", "drive", "youtube"]) {
+      expect(src("https://cdn.example.com/a.mp4", kind), kind).not.toBeNull();
+    }
+    expect(src("https://cdn.example.com/a.mp4", "torrent")).toBeNull();
+    expect(src("https://cdn.example.com/a.mp4", 7)).toBeNull();
+  });
+
+  it("refuses over-long URLs", () => {
     expect(src(`https://cdn.example.com/${"a".repeat(LIMITS.sourceUrlMax)}.mp4`)).toBeNull();
   });
 

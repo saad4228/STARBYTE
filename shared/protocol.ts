@@ -58,7 +58,7 @@ export interface MediaFingerprint {
  * A source everyone in the room loads from the same URL, instead of each viewer opening their
  * own copy. The server stores the URL and nothing else — it never fetches or proxies it.
  */
-export type RoomSourceKind = "drive" | "link";
+export type RoomSourceKind = "drive" | "link" | "youtube";
 
 export interface RoomSource {
   kind: RoomSourceKind;

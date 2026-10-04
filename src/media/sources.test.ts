@@ -86,3 +86,36 @@ describe("resolveSource", () => {
     });
   });
 });
+
+describe("YouTube links", () => {
+  const ID = "dQw4w9WgXcQ";
+  const expectId = (input: string) =>
+    expect(resolveSource(input)).toMatchObject({ kind: "youtube", url: `https://www.youtube.com/watch?v=${ID}` });
+
+  it("accepts every shape a YouTube link is copied in", () => {
+    expectId(`https://www.youtube.com/watch?v=${ID}`);
+    expectId(`https://youtube.com/watch?v=${ID}`);
+    expectId(`https://m.youtube.com/watch?v=${ID}`);
+    expectId(`https://youtu.be/${ID}`);
+    expectId(`https://youtu.be/${ID}?t=42`);
+    expectId(`https://www.youtube.com/embed/${ID}`);
+    expectId(`https://www.youtube.com/shorts/${ID}`);
+    expectId(`https://www.youtube.com/live/${ID}`);
+    expectId(`https://www.youtube-nocookie.com/embed/${ID}`);
+    expectId(`https://www.youtube.com/watch?v=${ID}&list=PL123&index=2`);
+  });
+
+  it("warns that the owner may have blocked embedding", () => {
+    expect(resolveSource(`https://youtu.be/${ID}`).warning).toMatch(/embedding/i);
+  });
+
+  it("says what's wrong with a YouTube link that has no video in it", () => {
+    expect(() => resolveSource("https://www.youtube.com/feed/subscriptions")).toThrow(/video id/i);
+    expect(() => resolveSource("https://www.youtube.com/@someone")).toThrow(/video id/i);
+  });
+
+  it("doesn't mistake a lookalike host for YouTube", () => {
+    const r = resolveSource("https://notyoutube.com/watch?v=dQw4w9WgXcQ");
+    expect(r.kind).toBe("link");
+  });
+});

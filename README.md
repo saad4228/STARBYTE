@@ -163,7 +163,8 @@ src/
   app/             Create / join / about / legal pages, API client, identity storage
   room/            RoomSession, connection, lobby, media panel, the watch room UI
   sync/            ServerClock, drift policy, SyncEngine
-  media/           Source adapter interface, HTML5 adapter, analysis worker, subtitles
+  media/           Source adapters (HTML5, YouTube), link resolving, analysis worker, subtitles
+  call/            WebRTC mesh: peer connections, signalling, speaking detection
   ui/              Pixel buttons, badges, logo
 ```
 
@@ -242,6 +243,21 @@ people arrive, and a salted IP hash caps how much one network can add in a day.
 
 ---
 
+## Why duration is measured twice
+
+A file's length is read once before playback, by a detached probe, and frozen into the
+fingerprint. That figure is load-bearing: the room clamps every seek to it, and two copies are
+judged the same film by comparing it. When it is wrong — browsers estimate it for some
+containers and revise it later, and phone recordings can simply carry a false value — the room
+becomes unusable in a way that looks like a sync bug: scrubbing past the bogus length snaps back,
+the status sits on "catching up" forever, and matching copies report a mismatch.
+
+So the player that is actually running gets the last word. `reconcileDuration` compares the live
+element against the fingerprint on every sync tick, and a disagreement over half a second
+rewrites the fingerprint and tells the room. The server takes the correction for the same file
+rather than treating it as a different one (`sameFile` deliberately ignores duration), which is
+also why re-measuring never resets anyone's ready state.
+
 ## Privacy model
 
 In Local Mode the room server sees: display names, random participant ids, playback actions, chat,
@@ -293,8 +309,9 @@ make such scripts easy; it is stripped from production builds.
   local subtitles, settings.
 - **V1.5 (shipped):** WebRTC voice/video as floating bubbles; the watch party keeps working when a
   call can't connect.
-- **V2 (partly shipped):** Google Drive and direct stream URLs are in. Still open: an official
-  YouTube embed, which needs its own `MediaAdapter` rather than an `<video>` element.
+- **V2 (shipped):** Google Drive, direct stream URLs, and YouTube through the official IFrame
+  player (`src/media/youtube.ts`) — each a `MediaAdapter`, so the sync engine never learns where
+  the picture came from.
 - **V3:** Live mode (live edge instead of a timeline, "sync to live room"), sports UI, deeper telemetry.
 
 A render error or a lazily-imported chunk that 404s (a deploy landing while someone has the page
@@ -318,3 +335,11 @@ page.
   failed check before the link ever reaches the room, not as a broken room.
 - **HLS (.m3u8) only plays where the browser plays it natively** — Safari and iOS. Chrome and Firefox
   need a direct MP4/WebM. DASH is not supported at all.
+- **YouTube is their player, not ours.** Videos whose owners disable embedding (most music videos
+  and films) cannot be used, and the check says so before the link reaches the room. Ads, age gates
+  and regional blocks are YouTube's. Its clock is coarse and its speed control is a fixed menu, so
+  the adapter declares `precision: "coarse"` and the engine corrects by seeking rather than by
+  nudging the rate.
+- **A 16:9 picture on an upright phone is capped by the screen's width** — about 220px tall on a
+  390px-wide phone, whatever the layout does. Fullscreen asks the phone to rotate (where the
+  browser allows it), which is the only thing that actually makes the picture bigger.

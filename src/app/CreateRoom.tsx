@@ -15,6 +15,7 @@ import { loadName, saveHostKey, saveName, suggestName } from "./identity";
 const SOURCES = [
   { id: "local", icon: icons.local, title: "Local file", desc: "Everyone plays their own copy. Nothing is uploaded." },
   { id: "drive", icon: icons.cloud, title: "Google Drive", desc: "Share one link; the whole room plays that file." },
+  { id: "youtube", icon: icons.stream, title: "YouTube", desc: "Paste a video link — it plays in YouTube's own player." },
   { id: "link", icon: icons.stream, title: "Direct link", desc: "Any https video URL the browser can open." },
 ] as const;
 

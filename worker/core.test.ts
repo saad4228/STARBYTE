@@ -406,3 +406,55 @@ describe("RoomCore call", () => {
     expect(core.find(ali.pid)?.call?.on).toBe(false);
   });
 });
+
+describe("RoomCore duration corrections", () => {
+  const shorter: MediaFingerprint = { ...MOVIE, duration: 57 };
+
+  it("takes a re-measured length for the same file, so seeks aren't clamped short", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: shorter }, 10, new Effects());
+    expect(core.snapshot().media?.duration).toBe(57);
+
+    const fx = new Effects();
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 20, fx);
+    expect(core.snapshot().media?.duration).toBe(MOVIE.duration);
+    const [room] = sent(fx, "room") as Extract<ServerMessage, { t: "room" }>[];
+    expect(room?.media?.duration).toBe(MOVIE.duration);
+  });
+
+  it("does not treat a re-measure as swapping the file, so readiness survives", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: shorter }, 10, new Effects());
+    core.handle(ali.pid, { t: "ready", ready: true }, 10, new Effects());
+    expect(core.find(ali.pid)?.ready).toBe(true);
+
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 20, new Effects());
+    expect(core.find(ali.pid)?.ready).toBe(true);
+  });
+
+  it("still treats genuinely different bytes as a different file", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    core.handle(ali.pid, { t: "ready", ready: true }, 10, new Effects());
+
+    core.handle(ali.pid, { t: "media", media: { ...MOVIE, sampleHash: "bbbbbbbbbbbbbbbb" } }, 20, new Effects());
+    expect(core.find(ali.pid)?.ready).toBe(false);
+  });
+
+  it("lets a corrected length raise the ceiling that seeks are clamped to", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: shorter }, 10, new Effects());
+    core.handle(ali.pid, { t: "start" }, 20, new Effects());
+
+    core.handle(ali.pid, { t: "seek", pos: 400 }, 30, new Effects());
+    expect(core.snapshot().playback.position).toBeLessThanOrEqual(57);
+
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 40, new Effects());
+    core.handle(ali.pid, { t: "seek", pos: 400 }, 50, new Effects());
+    expect(core.snapshot().playback.position).toBeCloseTo(400, 0);
+  });
+});

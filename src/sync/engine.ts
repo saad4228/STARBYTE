@@ -60,6 +60,12 @@ const PAUSED_TOLERANCE_S = 0.05;
 /** Right after a start, resume or seek, correct harder: a quick jump beats seconds of catch-up. */
 const SETTLE_MS = 3000;
 const SETTLE_HARD_MS = 250;
+/**
+ * Below this, two people watching the same frame cannot tell they are apart — roughly the
+ * offset you would get from sitting a few metres further from the screen. A correction this
+ * small is reported as synced rather than as catching up.
+ */
+const IMPERCEPTIBLE_MS = 250;
 
 /**
  * Keeps one media adapter on the room's timeline. Network traffic is zero: it only compares
@@ -196,13 +202,19 @@ export class SyncEngine {
     if (performance.now() < this.cooldownUntil) return emit("catching_up", { correction: "jump" });
 
     const drift = local - target;
-    const cfg = this.deps.getConfig();
+    let cfg = this.deps.getConfig();
+    // An embedded player reports its position in coarse steps and only accepts a fixed menu
+    // of speeds. Chasing 40ms there would mean nudging the rate against measurement noise
+    // forever, so widen the band and correct by seeking instead.
+    if (a.precision === "coarse") {
+      cfg = { ...cfg, gentle: false, deadbandMs: Math.max(cfg.deadbandMs, 400), hardMs: Math.max(cfg.hardMs, 1200) };
+    }
     const settling = now - pb.anchor < SETTLE_MS;
     const decision = decideDrift(
       drift,
       pb.rate,
       this.correcting,
-      settling ? { ...cfg, hardMs: Math.min(cfg.hardMs, SETTLE_HARD_MS) } : cfg,
+      settling && a.precision !== "coarse" ? { ...cfg, hardMs: Math.min(cfg.hardMs, SETTLE_HARD_MS) } : cfg,
     );
     if (decision.kind === "jump") {
       this.jump(target, drift);
@@ -210,7 +222,15 @@ export class SyncEngine {
     }
     this.correcting = decision.kind === "nudge";
     this.applyRate(decision.rate);
-    return emit(this.correcting ? "catching_up" : "synced", { correction: this.correcting ? "nudge" : "none" });
+    // A gentle nudge closes the last fraction of a second at a few percent of real time, which
+    // can take ten seconds or more. Calling that "catching up" the whole while reads as though
+    // playback is stuck, when the viewer is already closer to the room than anyone could
+    // perceive. Below the perceptible threshold the room is synced; the correction continues
+    // quietly underneath, and the sync panel still shows the exact figure.
+    const perceptible = Math.abs(drift) * 1000 > IMPERCEPTIBLE_MS;
+    return emit(this.correcting && perceptible ? "catching_up" : "synced", {
+      correction: this.correcting ? "nudge" : "none",
+    });
   }
 
   private jump(target: number, drift: number): void {

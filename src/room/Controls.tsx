@@ -21,14 +21,35 @@ import { PixelButton } from "../ui/PixelButton";
 import { CallControls } from "./CallBubbles";
 import { useRoom, useSession } from "./context";
 
+/** Screen Orientation lock, which only some browsers implement. */
+type Orientation = ScreenOrientation & {
+  lock?: (o: "landscape") => Promise<void>;
+  unlock?: () => void;
+};
+
 export function toggleFullscreen(el: HTMLElement | null): void {
   if (!el) return;
+  const orientation = screen.orientation as Orientation | undefined;
+
   if (document.fullscreenElement) {
+    orientation?.unlock?.();
     void document.exitFullscreen();
   } else if (el.requestFullscreen) {
-    el.requestFullscreen().catch(() => {});
+    void el
+      .requestFullscreen()
+      .then(() => {
+        // A 16:9 film on an upright phone is a thin strip however much room it is given —
+        // the picture is capped by the screen's width. Turning the phone is what actually
+        // makes it bigger, so fullscreen does it for you where the browser allows it.
+        // iOS has no orientation lock and rejects this; the fullscreen still stands.
+        if (matchMedia("(pointer: coarse)").matches && matchMedia("(orientation: portrait)").matches) {
+          orientation?.lock?.("landscape").catch(() => {});
+        }
+      })
+      .catch(() => {});
   } else {
-    // iPhone Safari: only the video element itself can go fullscreen.
+    // iPhone Safari: only the video element itself can go fullscreen, and it handles the
+    // rotation on its own once it is there.
     const video = el.querySelector("video") as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
     video?.webkitEnterFullscreen?.();
   }

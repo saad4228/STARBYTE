@@ -1,5 +1,6 @@
 import { LIMITS } from "../../shared/constants";
 import type { MediaFingerprint, RoomSourceKind } from "../../shared/protocol";
+import { parseYouTubeId, probeYouTube } from "./youtube";
 
 /**
  * Shared sources: one URL that everybody in the room loads, rather than everybody opening their
@@ -68,6 +69,22 @@ export function resolveSource(input: string): ResolvedSource {
   }
   if (url.protocol !== "https:") throw new SourceError("Only https links are supported.");
 
+  const youtube = parseYouTubeId(url);
+  if (youtube) {
+    return {
+      kind: "youtube",
+      url: `https://www.youtube.com/watch?v=${youtube}`,
+      name: "YouTube video",
+      warning:
+        "Plays through YouTube's own player, so ads and availability are theirs. Videos whose owners block embedding can't be used.",
+    };
+  }
+  if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(url.hostname)) {
+    throw new SourceError(
+      "That's a YouTube link, but there's no video id in it. Open the video itself and copy the link from the address bar.",
+    );
+  }
+
   if (DRIVE_HOSTS.has(url.hostname)) return resolveDrive(url);
 
   if (HLS_EXT.test(url.pathname) && !canPlayType("application/vnd.apple.mpegurl")) {
@@ -118,7 +135,26 @@ export interface SourceProbe {
  * Load just the metadata to prove the link really plays here, before it is pushed to the room.
  * A host who publishes a dead link breaks the room for everyone, so this always runs first.
  */
-export function probeSource(url: string, timeoutMs = 20_000): Promise<SourceProbe> {
+export async function probeSource(url: string, timeoutMs = 20_000): Promise<SourceProbe> {
+  // YouTube is not a file: only its own player can say whether a video is playable here.
+  const parsed = safeUrl(url);
+  const youtube = parsed && parseYouTubeId(parsed);
+  if (youtube) {
+    const { duration } = await probeYouTube(youtube);
+    return { duration, width: 0, height: 0 };
+  }
+  return probeFile(url, timeoutMs);
+}
+
+function safeUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+function probeFile(url: string, timeoutMs: number): Promise<SourceProbe> {
   return new Promise((resolve, reject) => {
     const v = document.createElement("video");
     v.preload = "metadata";

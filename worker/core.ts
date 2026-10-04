@@ -139,9 +139,14 @@ export function toPublic(p: ParticipantRecord): ParticipantPublic {
 }
 
 /** Same file, judged by the sampled fingerprint. A whole-file hash arriving later doesn't make it a new file. */
+/**
+ * The same bytes. Duration is deliberately excluded: a browser's first reading of a file's
+ * length can be an estimate that it revises once it has seen more of the file, and a viewer
+ * re-measuring the very same file must not look like they swapped it for a different one.
+ */
 function sameFile(a: MediaFingerprint | null, b: MediaFingerprint | null): boolean {
   if (!a || !b) return a === b;
-  return a.sampleHash === b.sampleHash && a.size === b.size && a.duration === b.duration;
+  return a.sampleHash === b.sampleHash && a.size === b.size;
 }
 
 /** Token buckets: generous for humans, tight enough that one client cannot flood a room. */
@@ -485,6 +490,14 @@ export class RoomCore {
     const control = canControl(p, this.data.meta.settings);
     // The first controller to bring media defines what the room is watching.
     if (!room && media && control) return this.adopt(p, now, fx);
+    // Same file, but a player re-measured its length. Every seek in the room is clamped to
+    // this number, so a stale estimate here leaves people unable to scrub past it — take the
+    // correction rather than letting the room stay stuck on a wrong length.
+    if (room && media && sameFile(room, media) && room.duration !== media.duration) {
+      this.data.media = { ...room, duration: media.duration };
+      fx.all(this.roomMsg());
+      fx.touch("media");
+    }
     // A controller verified the room's own file end to end: record the whole-file hash on the reference.
     if (room && media?.fullHash && control && !room.fullHash && sameFile(room, media)) {
       this.data.media = { ...room, fullHash: media.fullHash };

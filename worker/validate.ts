@@ -1,6 +1,6 @@
 import { LIMITS, PLAYBACK_RATES } from "../shared/constants";
 import { cleanText } from "../shared/format";
-import type { ClientMessage, MediaFingerprint, RoomSettings, SyncStatus } from "../shared/protocol";
+import type { ClientMessage, MediaFingerprint, RoomSettings, RoomSourceKind, SyncStatus } from "../shared/protocol";
 
 /**
  * Strict parsing for everything a client sends. Anything that does not match the expected
@@ -71,9 +71,9 @@ function parseSourceUrl(v: unknown): string | null {
   return url.toString();
 }
 
-function parseSource(v: unknown): { kind: "drive" | "link"; url: string; name: string } | null {
+function parseSource(v: unknown): { kind: RoomSourceKind; url: string; name: string } | null {
   if (!isObj(v)) return null;
-  if (v.kind !== "drive" && v.kind !== "link") return null;
+  if (v.kind !== "drive" && v.kind !== "link" && v.kind !== "youtube") return null;
   const url = parseSourceUrl(v.url);
   if (!url) return null;
   const name = cleanText(v.name, LIMITS.sourceNameMax);

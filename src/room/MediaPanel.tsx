@@ -2,6 +2,7 @@ import { ArrowRight, FileVideo, Link2, Lock, ShieldCheck, Users } from "lucide-r
 import { useRef, useState, type DragEvent } from "react";
 import { formatBytes, formatDelta, formatTime } from "../../shared/format";
 import { compareMedia } from "../../shared/media";
+import type { RoomSourceKind } from "../../shared/protocol";
 import { Avatar } from "../art/Avatar";
 import { Pixel } from "../art/Pixel";
 import { icons } from "../art/sprites";
@@ -12,6 +13,8 @@ import { Badge, Chip } from "../ui/Badge";
 import { PixelButton } from "../ui/PixelButton";
 import { useRoom, useSession } from "./context";
 import { StepIcon } from "./parts";
+
+const SOURCE_LABEL: Record<RoomSourceKind, string> = { drive: "Drive", youtube: "YouTube", link: "Link" };
 
 interface MediaPanelProps {
   /** Shown when the media is ready ("Enter cinema"). Omit inside the room. */
@@ -174,8 +177,8 @@ function SourceForm() {
           className="input"
           type="url"
           inputMode="url"
-          placeholder="Google Drive link or direct video URL"
-          aria-label="Google Drive link or direct video URL"
+          placeholder="YouTube, Google Drive, or a direct video URL"
+          aria-label="YouTube, Google Drive, or a direct video URL"
           value={value}
           disabled={busy}
           onChange={(e) => {
@@ -194,8 +197,8 @@ function SourceForm() {
         </Notice>
       )}
       <p className="srcform__note">
-        Everyone plays it straight from the source — it still never passes through STARBYTE. Drive files must be
-        shared as “Anyone with the link”.
+        Everyone plays it straight from the source — it still never passes through STARBYTE. YouTube runs in its own
+        player, and Drive files must be shared as “Anyone with the link”.
       </p>
     </form>
   );
@@ -217,7 +220,7 @@ function LoadingSource() {
       <div className="mp__target">
         <Link2 size={18} aria-hidden="true" />
         <span className="mp__target-name">{source?.name ?? "Shared source"}</span>
-        {source && <Chip tone={source.kind === "drive" ? "live" : "soon"}>{source.kind === "drive" ? "Drive" : "Link"}</Chip>}
+        {source && <Chip tone="live">{SOURCE_LABEL[source.kind]}</Chip>}
       </div>
       {analysis.error ? (
         <>

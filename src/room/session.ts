@@ -22,7 +22,9 @@ import { fetchRoomInfo, roomSocketUrl } from "../app/api";
 import { forgetIdentity, loadHostKey, loadIdentity, loadName, saveIdentity, saveName, suggestName } from "../app/identity";
 import { navigate } from "../lib/router";
 import { AnalysisError, analyzeFile, deepVerify, type AnalysisStep, type MediaAnalysis } from "../media/analyze";
+import type { MediaAdapter } from "../media/adapter";
 import { Html5MediaAdapter } from "../media/html5";
+import { YouTubeAdapter, YouTubeError, parseYouTubeId } from "../media/youtube";
 import { probeSource, resolveSource, SourceError, sourceFingerprint, type ResolvedSource } from "../media/sources";
 import { CallManager, type CallSnapshot } from "../call/manager";
 import { attachSubtitles, readSubtitleFile, setSubtitlesVisible } from "../media/subtitles";
@@ -57,7 +59,7 @@ export interface LocalMedia {
   /** Set when this came from a room-wide link rather than a file on disk. */
   source: ResolvedSource | null;
   fingerprint: MediaFingerprint;
-  adapter: Html5MediaAdapter;
+  adapter: MediaAdapter;
   url: string;
   subtitles: { label: string; detach: () => void } | null;
   /** Whole-file verification progress, 0–1, while it runs. */
@@ -124,6 +126,20 @@ export interface SessionState {
 }
 
 const CHAT_KEEP = 200;
+
+/** A shared source becomes whichever player can actually play it. */
+function buildSourceAdapter(source: RoomSource, duration: number): MediaAdapter {
+  if (source.kind === "youtube") {
+    let id: string | null = null;
+    try {
+      id = parseYouTubeId(new URL(source.url));
+    } catch {
+      id = null;
+    }
+    if (id) return new YouTubeAdapter(id, duration);
+  }
+  return new Html5MediaAdapter(source.kind, source.url, duration);
+}
 
 const IDLE_CALL: CallSnapshot = {
   joined: false,
@@ -197,6 +213,7 @@ export class RoomSession {
       getConfig: () => this.store.get().prefs.drift,
       onSnapshot: (sync) => {
         this.store.set({ sync });
+        this.reconcileDuration();
         this.reportStatus();
       },
       onEnded: () => this.send({ t: "ended" }),
@@ -641,8 +658,9 @@ export class RoomSession {
   unlockAudio(): void {
     const media = this.store.get().media;
     if (!media) return;
+    // Only a real <video> needs this nudge; the embedded players manage their own unlocking.
     const v = media.adapter.element;
-    if (v.paused && this.playback()?.status !== "playing") {
+    if (v instanceof HTMLVideoElement && v.paused && this.playback()?.status !== "playing") {
       const wasMuted = v.muted;
       v.muted = true;
       v.play()
@@ -720,6 +738,40 @@ export class RoomSession {
     this.send({ t: "adoptMedia" });
   }
 
+  /**
+   * The length a file reports before playing is not always the truth. Browsers estimate it for
+   * some containers and revise it once they have read further, and phone recordings in
+   * particular can carry a flatly wrong figure in their metadata.
+   *
+   * That one number decides a great deal: the room clamps every seek to it, so a value that is
+   * too short leaves people unable to scrub past it and stuck on "catching up" forever, and a
+   * wrong value makes two copies of the same film look like different files. So the element
+   * that is actually playing gets the last word, and the correction goes to the room.
+   */
+  private watchDuration(adapter: MediaAdapter): void {
+    adapter.subscribe((e) => {
+      if (e === "loadedmetadata" || e === "durationchange" || e === "ended") this.reconcileDuration();
+    });
+  }
+
+  /**
+   * Checked on every sync tick as well as on the player's own duration events, because the two
+   * figures can disagree without anything firing: the probe runs once, before playback, and
+   * whatever it concluded is then frozen into the fingerprint.
+   */
+  private reconcileDuration(): void {
+    const media = this.store.get().media;
+    if (!media) return;
+    const live = media.adapter.getDuration();
+    if (!Number.isFinite(live) || live <= 0) return;
+    if (Math.abs(live - media.fingerprint.duration) < 0.5) return;
+
+    const fingerprint = { ...media.fingerprint, duration: live };
+    this.patchMedia({ fingerprint });
+    this.send({ t: "media", media: fingerprint });
+    this.engine.poke();
+  }
+
   // ── Shared sources (Drive / link) ─────────────────────────────────────────
 
   /**
@@ -783,15 +835,16 @@ export class RoomSession {
       const previous = this.store.get().media;
       if (previous) this.release(previous);
 
-      const adapter = new Html5MediaAdapter(source.kind, source.url, probe.duration);
+      const adapter = buildSourceAdapter(source, probe.duration);
       const { prefs } = this.store.get();
       adapter.setVolume(prefs.volume);
       adapter.setMuted(prefs.muted);
       adapter.subscribe((e) => {
         if (e === "error" && this.store.get().media?.adapter === adapter) {
-          this.toast("danger", "The shared link stopped playing. It may have expired or been made private.");
+          this.toast("danger", "The shared source stopped playing. It may have expired or been made private.");
         }
       });
+      this.watchDuration(adapter);
       const media: LocalMedia = {
         file: null,
         analysis: null,
@@ -804,6 +857,11 @@ export class RoomSession {
       };
       this.store.set({ media, analysis: null });
       this.engine.attach(adapter);
+      // YouTube builds its player only once the element is on the page, which the stage does.
+      void adapter.load().catch((err: unknown) => {
+        if (this.store.get().media?.adapter !== adapter) return;
+        this.toast("danger", err instanceof YouTubeError ? err.message : "The shared source could not be opened.");
+      });
       this.send({ t: "media", media: fingerprint });
       this.system(`Now showing: ${source.name}`);
     } catch (err) {
@@ -873,6 +931,7 @@ export class RoomSession {
           this.toast("danger", "This browser stopped playing the file. Try another copy or format.");
         }
       });
+      this.watchDuration(adapter);
       const media: LocalMedia = {
         file,
         analysis,
@@ -916,11 +975,16 @@ export class RoomSession {
 
   async loadSubtitles(file: File): Promise<void> {
     const media = this.store.get().media;
-    if (!media) return;
+    const video = media?.adapter.element;
+    if (!media || !(video instanceof HTMLVideoElement)) {
+      // An embedded player carries its own captions; we cannot staple a track onto it.
+      if (media) this.toast("warn", "Subtitle files only work with your own video — this source brings its own captions.");
+      return;
+    }
     try {
       const vtt = await readSubtitleFile(file);
       media.subtitles?.detach();
-      const detach = attachSubtitles(media.adapter.element, vtt, file.name);
+      const detach = attachSubtitles(video, vtt, file.name);
       this.patchMedia({ subtitles: { label: file.name, detach } });
       this.setPrefs({ subtitlesVisible: true });
       this.toast("ok", `Subtitles loaded: ${file.name}`);
@@ -1003,7 +1067,10 @@ export class RoomSession {
     savePrefs(prefs);
     this.store.set({ prefs });
     const media = this.store.get().media;
-    if (media && patch.subtitlesVisible !== undefined) setSubtitlesVisible(media.adapter.element, patch.subtitlesVisible);
+    const video = media?.adapter.element;
+    if (video instanceof HTMLVideoElement && patch.subtitlesVisible !== undefined) {
+      setSubtitlesVisible(video, patch.subtitlesVisible);
+    }
     if (patch.drift) this.engine.poke();
   }
 

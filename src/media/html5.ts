@@ -2,6 +2,7 @@ import type { AdapterEvent, MediaAdapter, SourceKind } from "./adapter";
 
 const FORWARDED: AdapterEvent[] = [
   "loadedmetadata",
+  "durationchange",
   "play",
   "pause",
   "playing",
