@@ -255,11 +255,25 @@ export class YouTubeAdapter implements MediaAdapter {
     this.element = el;
   }
 
-  /** Creates the player. Must run after the element is on the page. */
+  /**
+   * Creates the player, once the element is actually on the page.
+   *
+   * A failure is deliberately not remembered. The usual cause is simply that the stage was not
+   * on screen yet — the source is chosen in the lobby, where there is no player to mount into —
+   * and caching that would leave a permanently black screen for a video that is perfectly fine.
+   */
   load(): Promise<void> {
-    this.ready ??= (async () => {
+    this.ready ??= this.build().catch((err: unknown) => {
+      this.ready = null;
+      throw err;
+    });
+    return this.ready;
+  }
+
+  private build(): Promise<void> {
+    return (async () => {
       const api = await loadYouTubeApi();
-      await waitForConnected(this.element);
+      await this.waitForMount();
       if (this.destroyed) return;
       const player = await createPlayer(
         api,
@@ -279,7 +293,26 @@ export class YouTubeAdapter implements MediaAdapter {
       this.emit("loadedmetadata");
       this.emit("durationchange");
     })();
-    return this.ready;
+  }
+
+  /**
+   * Waits for the element to reach the page. Not being mounted yet is an ordinary state, not a
+   * failure: the source is picked in the lobby and the stage only appears on entering the room,
+   * which can be minutes later. An interval rather than rAF, so it still ticks in a background tab.
+   */
+  private waitForMount(): Promise<void> {
+    if (this.element.isConnected) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setInterval(() => {
+        if (this.element.isConnected) {
+          clearInterval(timer);
+          resolve();
+        } else if (this.destroyed) {
+          clearInterval(timer);
+          reject(new YouTubeError("The player was closed before it opened."));
+        }
+      }, 150);
+    });
   }
 
   private onState(state: number): void {
@@ -416,16 +449,3 @@ export class YouTubeAdapter implements MediaAdapter {
   }
 }
 
-/** YouTube needs its target in the document before it will build the iframe. */
-function waitForConnected(el: HTMLElement, timeoutMs = 10_000): Promise<void> {
-  if (el.isConnected) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const tick = () => {
-      if (el.isConnected) return resolve();
-      if (Date.now() - started > timeoutMs) return reject(new YouTubeError("The player never appeared on the page."));
-      requestAnimationFrame(tick);
-    };
-    tick();
-  });
-}

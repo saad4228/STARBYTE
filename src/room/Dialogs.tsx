@@ -101,7 +101,7 @@ export function SettingsDialog() {
   const session = useSession();
   const open = useRoom((s) => s.ui.dialog === "settings");
   return (
-    <Dialog open={open} onClose={() => session.openDialog(null)} className="sheet" labelledBy="settings-title">
+    <Dialog open={open} onClose={() => session.closeDialog("settings")} className="sheet" labelledBy="settings-title">
       <SettingsBody />
     </Dialog>
   );
@@ -380,7 +380,7 @@ export function MediaDialog() {
   const session = useSession();
   const open = useRoom((s) => s.ui.dialog === "media");
   return (
-    <Dialog open={open} onClose={() => session.openDialog(null)} className="modal" labelledBy="media-title">
+    <Dialog open={open} onClose={() => session.closeDialog("media")} className="modal" labelledBy="media-title">
       <div className="modal__inner">
         <button type="button" className="ibtn modal__close" onClick={() => session.openDialog(null)} aria-label="Close">
           <X />
@@ -408,7 +408,7 @@ export function HelpDialog() {
   const session = useSession();
   const open = useRoom((s) => s.ui.dialog === "help");
   return (
-    <Dialog open={open} onClose={() => session.openDialog(null)} className="modal modal--small" labelledBy="help-title">
+    <Dialog open={open} onClose={() => session.closeDialog("help")} className="modal modal--small" labelledBy="help-title">
       <div className="modal__inner">
         <button type="button" className="ibtn modal__close" onClick={() => session.openDialog(null)} aria-label="Close">
           <X />

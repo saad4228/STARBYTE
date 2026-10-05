@@ -502,6 +502,11 @@ export class RoomCore {
 
   private onMedia(p: ParticipantRecord, media: MediaFingerprint | null, now: number, fx: Effects): void {
     if (!this.take(p.id, "misc", now)) return;
+    const room = this.data.media;
+    const control = canControl(p, this.data.meta.settings);
+    // Were they the one whose copy the room is watching?
+    const wasReference = !!room && !!p.media && sameFile(room, p.media);
+
     const changed = !sameFile(p.media, media);
     p.media = media;
     if (changed) p.ready = false;
@@ -509,10 +514,14 @@ export class RoomCore {
     fx.all({ t: "participant", participant: toPublic(p) });
     fx.touch("participants");
 
-    const room = this.data.media;
-    const control = canControl(p, this.data.meta.settings);
     // The first controller to bring media defines what the room is watching.
     if (!room && media && control) return this.adopt(p, now, fx);
+    /**
+     * The room was watching this person's copy and they have just swapped it for another.
+     * Changing the film is what they meant; telling them their new file does not match the
+     * old one they themselves replaced would be an accusation about nobody.
+     */
+    if (room && media && control && wasReference && changed) return this.adopt(p, now, fx);
     // Same file, but a player re-measured its length. Every seek in the room is clamped to
     // this number, so a stale estimate here leaves people unable to scrub past it — take the
     // correction rather than letting the room stay stuck on a wrong length.

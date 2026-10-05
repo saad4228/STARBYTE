@@ -588,3 +588,50 @@ describe("RoomCore leaving live behind", () => {
     expect(core.snapshot().playback.position).toBeCloseTo(100, 0);
   });
 });
+
+describe("RoomCore changing the film", () => {
+  const OTHER: MediaFingerprint = { ...MOVIE, name: "Other.mp4", size: 999, duration: 57, sampleHash: "eeeeeeeeeeeeeeee" };
+
+  it("follows the person whose copy the room is watching when they swap it", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    expect(core.snapshot().media?.name).toBe(MOVIE.name);
+
+    core.handle(ali.pid, { t: "media", media: OTHER }, 20, new Effects());
+    expect(core.snapshot().media?.name).toBe(OTHER.name);
+    expect(core.snapshot().media?.duration).toBe(57);
+  });
+
+  it("does not let a viewer's own swap hijack someone else's film", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    const bo = join(core, "Bo");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+
+    core.handle(bo.pid, { t: "media", media: OTHER }, 20, new Effects());
+    expect(core.snapshot().media?.name).toBe(MOVIE.name); // still Ali's
+  });
+
+  it("refuses the swap from someone without control", () => {
+    const core = makeRoom("host");
+    const ali = join(core, "Ali"); // acting host
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    const bo = join(core, "Bo");
+    core.handle(bo.pid, { t: "media", media: OTHER }, 20, new Effects());
+    expect(core.snapshot().media?.name).toBe(MOVIE.name);
+  });
+
+  it("resets the room so a swap mid-film starts the new one from the top", () => {
+    const core = makeRoom();
+    const ali = join(core, "Ali");
+    core.handle(ali.pid, { t: "media", media: MOVIE }, 10, new Effects());
+    core.handle(ali.pid, { t: "start" }, 20, new Effects());
+    core.handle(ali.pid, { t: "seek", pos: 300 }, 30, new Effects());
+
+    core.handle(ali.pid, { t: "media", media: OTHER }, 40, new Effects());
+    const pb = core.snapshot().playback;
+    expect(pb.position).toBe(0);
+    expect(pb.started).toBe(false);
+  });
+});

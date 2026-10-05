@@ -153,6 +153,18 @@ async function probeMetadata(file: File): Promise<{ duration: number; width: num
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new AnalysisError("unsupported", "This file doesn't report its length, so it can't be synchronized.");
     }
+
+    // Confirm the claimed end actually exists. Some files overstate their own length — a
+    // recording that was interrupted, or a careless remux — and the room clamps every seek to
+    // this number, so believing it would let people scrub to a place the file does not
+    // contain and sit on "catching up" forever. Seeking there is the cheap way to find out.
+    if (duration > 1) {
+      v.currentTime = Math.max(0, duration - 0.25);
+      await waitFor(v, "seeked", 8000).catch(() => {});
+      const landed = v.currentTime;
+      if (Number.isFinite(landed) && landed > 0.5 && landed < duration - 1) duration = landed;
+    }
+
     return { duration, width: v.videoWidth, height: v.videoHeight };
   } finally {
     v.removeAttribute("src");

@@ -751,7 +751,8 @@ export class RoomSession {
    */
   private watchDuration(adapter: MediaAdapter): void {
     adapter.subscribe((e) => {
-      if (e === "loadedmetadata" || e === "durationchange" || e === "ended") this.reconcileDuration();
+      if (e === "ended") this.reconcileDuration("ended");
+      else if (e === "loadedmetadata" || e === "durationchange") this.reconcileDuration("playing");
     });
   }
 
@@ -760,14 +761,30 @@ export class RoomSession {
    * figures can disagree without anything firing: the probe runs once, before playback, and
    * whatever it concluded is then frozen into the fingerprint.
    */
-  private reconcileDuration(): void {
+  private reconcileDuration(evidence: "playing" | "ended" = "playing"): void {
     const media = this.store.get().media;
     if (!media) return;
-    const live = media.adapter.getDuration();
-    if (!Number.isFinite(live) || live <= 0) return;
-    if (Math.abs(live - media.fingerprint.duration) < 0.5) return;
+    const a = media.adapter;
+    if (a.isLive()) return; // a broadcast has no length to agree on
+    const recorded = media.fingerprint.duration;
+    const at = a.getCurrentTime();
+    const reported = a.getDuration();
+    let measured: number | null = null;
 
-    const fingerprint = { ...media.fingerprint, duration: live };
+    // Longer than recorded: we are playing past the end we were told about, so the file
+    // demonstrably has more in it than the figure we are holding.
+    if (Number.isFinite(at) && at > recorded + 1) {
+      measured = Number.isFinite(reported) && reported > at ? reported : at;
+    }
+    // Shorter than recorded: the player reached the end well before it. A container that
+    // overstates its own length would otherwise have the room seeking to a place the file
+    // does not contain — everybody stuck on "catching up", unable to scrub, forever.
+    if (evidence === "ended" && Number.isFinite(at) && at > 1 && at < recorded - 1) {
+      measured = at;
+    }
+
+    if (measured === null || Math.abs(measured - recorded) < 0.5) return;
+    const fingerprint = { ...media.fingerprint, duration: measured };
     this.patchMedia({ fingerprint });
     this.send({ t: "media", media: fingerprint });
     this.engine.poke();
@@ -1082,6 +1099,15 @@ export class RoomSession {
       const cinema = force ?? !st.ui.cinema;
       return { ui: { ...st.ui, cinema, unread: !cinema && st.ui.tab === "chat" ? 0 : st.ui.unread } };
     });
+  }
+
+  /**
+   * Close a dialog only if it is still the one on screen. Opening the media picker from inside
+   * the settings sheet closes the sheet, and the sheet's own close handler would otherwise wipe
+   * the name that had just been set — leaving "Change file…" doing nothing at all.
+   */
+  closeDialog(which: DialogName): void {
+    if (this.store.get().ui.dialog === which) this.openDialog(null);
   }
 
   openDialog(dialog: DialogName | null): void {
