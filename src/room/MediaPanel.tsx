@@ -157,6 +157,9 @@ function Dropzone({ onPick }: { onPick: () => void }) {
 function SourceForm() {
   const session = useSession();
   const check = useRoom((s) => s.sourceCheck);
+  // Putting a link up is a room-wide act, so it has to wait for the room. Offering the button
+  // before then just drops the click.
+  const joined = useRoom((s) => !!s.room && !!s.me);
   const [value, setValue] = useState("");
   const busy = !!check?.busy;
 
@@ -165,7 +168,7 @@ function SourceForm() {
       className="srcform"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!busy && value.trim()) void session.setSource(value);
+        if (!busy && joined && value.trim()) void session.setSource(value);
       }}
     >
       <div className="srcform__head">
@@ -180,16 +183,17 @@ function SourceForm() {
           placeholder="YouTube, Google Drive, or a direct video URL"
           aria-label="YouTube, Google Drive, or a direct video URL"
           value={value}
-          disabled={busy}
+          disabled={busy || !joined}
           onChange={(e) => {
             setValue(e.target.value);
             if (check) session.dismissSourceCheck();
           }}
         />
-        <PixelButton type="submit" disabled={busy || !value.trim()}>
+        <PixelButton type="submit" disabled={busy || !joined || !value.trim()}>
           {busy ? "Checking…" : "Use link"}
         </PixelButton>
       </div>
+      {!joined && <p className="srcform__busy">Joining the room…</p>}
       {busy && <p className="srcform__busy">Opening it here first, so a dead link never reaches the room…</p>}
       {check?.error && (
         <Notice tone="danger" title="That link didn't work">

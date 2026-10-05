@@ -696,6 +696,14 @@ export class RoomSession {
   }
 
   private guardControl(): boolean {
+    const { room, me } = this.store.get();
+    // Not connected yet is not the same as not allowed. Telling someone they lack permission
+    // when the room simply has not finished joining sends them looking for a problem that
+    // isn't there — and their action is dropped either way.
+    if (!room || !me) {
+      this.toast("warn", "Still joining the room — give it a second, then try again.");
+      return false;
+    }
     if (this.canControl()) return true;
     this.toast("warn", "Only the host can control playback in this room.");
     return false;
