@@ -1,6 +1,7 @@
 import { Loader2, MicOff, Play, RotateCcw, VolumeX } from "lucide-react";
 import {
   useCallback,
+  type CSSProperties,
   useEffect,
   useRef,
   useState,
@@ -160,6 +161,7 @@ function Bubbles() {
   const room = useRoom((s) => s.room);
   const me = useRoom((s) => s.me);
   const call = useRoom((s) => s.call);
+  const callSize = useRoom((s) => s.prefs.callSize);
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
@@ -178,8 +180,14 @@ function Bubbles() {
   const streamOf = (pid: string) =>
     pid === me ? call.local : (call.peers.find((x) => x.pid === pid)?.stream ?? null);
   const peerStatus = (pid: string) => call.peers.find((x) => x.pid === pid)?.status ?? null;
+  // Faces in the call follow the viewer's chosen size; everyone else stays a small marker.
+  const anyInCall = people.some((p) => p.call?.on && p.online);
   return (
-    <div className="bubbles" aria-label="People watching">
+    <div
+      className="bubbles"
+      aria-label="People watching"
+      style={anyInCall ? ({ ["--call-face" as string]: `${callSize}px` } as CSSProperties) : undefined}
+    >
       {people.map((p) => {
         const match = p.media && room.media ? compareMedia(room.media, p.media).match : null;
         const state = !p.online
@@ -219,9 +227,9 @@ function Bubbles() {
               onClick={() => setOpen((o) => (o === p.id ? null : p.id))}
             >
               {inCall ? (
-                <CallFace seed={p.avatar} stream={stream} video={!!p.call?.video} size={40} self={p.id === me} />
+                <CallFace seed={p.avatar} stream={stream} video={!!p.call?.video} size={callSize} self={p.id === me} />
               ) : (
-                <Avatar seed={p.avatar} size={40} tone={state.tone} />
+                <Avatar seed={p.avatar} size={inCall ? callSize : 40} tone={state.tone} />
               )}
               {inCall && p.call?.muted && (
                 <span className="bubble__mic" aria-hidden="true">

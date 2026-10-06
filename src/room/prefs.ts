@@ -1,5 +1,9 @@
 import { DEFAULT_DRIFT, type DriftConfig } from "../sync/drift";
 
+/** The range the call faces can be dragged between. */
+export const CALL_SIZE_MIN = 36;
+export const CALL_SIZE_MAX = 168;
+
 /** Personal preferences. They stay in this browser and never affect anyone else. */
 export interface Prefs {
   drift: DriftConfig;
@@ -11,6 +15,11 @@ export interface Prefs {
   duckOnTalk: boolean;
   /** Join the call with the camera on rather than voice only. */
   callVideoDefault: boolean;
+  /**
+   * How large the faces in the call are drawn, in pixels. Small by default so the film stays
+   * the thing you are watching, but entirely yours to change.
+   */
+  callSize: number;
   notify: {
     presence: boolean;
     playback: boolean;
@@ -28,6 +37,7 @@ export const DEFAULT_PREFS: Prefs = {
   showReactions: true,
   duckOnTalk: true,
   callVideoDefault: false,
+  callSize: 44,
   notify: { presence: true, playback: true, sync: false, connection: true },
   volume: 1,
   muted: false,
@@ -55,6 +65,7 @@ export function loadPrefs(): Prefs {
       showReactions: bool(v.showReactions, DEFAULT_PREFS.showReactions),
       duckOnTalk: bool(v.duckOnTalk, DEFAULT_PREFS.duckOnTalk),
       callVideoDefault: bool(v.callVideoDefault, DEFAULT_PREFS.callVideoDefault),
+      callSize: num(v.callSize, DEFAULT_PREFS.callSize, CALL_SIZE_MIN, CALL_SIZE_MAX),
       notify: {
         presence: bool(v.notify?.presence, DEFAULT_PREFS.notify.presence),
         playback: bool(v.notify?.playback, DEFAULT_PREFS.notify.playback),

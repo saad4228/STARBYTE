@@ -64,6 +64,9 @@ function PeopleStrip() {
   const participants = useRoom((s) => s.room?.participants);
   const me = useRoom((s) => s.me);
   const call = useRoom((s) => s.call);
+  // The strip sits under the picture on a phone, so it honours the same preference but
+  // stops short of taking over the screen.
+  const faceSize = useRoom((s) => Math.min(s.prefs.callSize, 88));
   if (!participants) return null;
   const talking = new Set(call.speaking.map((k) => (k === "self" ? me : k)));
   const streamOf = (pid: string) => (pid === me ? call.local : (call.peers.find((x) => x.pid === pid)?.stream ?? null));
@@ -78,7 +81,7 @@ function PeopleStrip() {
             <li key={p.id} className={cx(inCall && "is-call", talking.has(p.id) && "is-speaking")}>
               {inCall ? (
                 <span className="strip__face">
-                  <CallFace seed={p.avatar} stream={streamOf(p.id)} video={!!p.call?.video} size={30} self={p.id === me} />
+                  <CallFace seed={p.avatar} stream={streamOf(p.id)} video={!!p.call?.video} size={faceSize} self={p.id === me} />
                   {p.call?.muted && (
                     <i className="strip__mic" aria-hidden="true">
                       <MicOff size={9} />

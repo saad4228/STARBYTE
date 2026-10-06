@@ -5,6 +5,7 @@ import { formatBytes, formatTime } from "../../shared/format";
 import { formatRoomId } from "../../shared/ids";
 import type { AutoStart, ControlMode } from "../../shared/protocol";
 import { PixelButton } from "../ui/PixelButton";
+import { CallSizeControl } from "./CallBubbles";
 import { useRoom, useSession } from "./context";
 import { InviteCard } from "./Lobby";
 import { MediaPanel } from "./MediaPanel";
@@ -336,6 +337,7 @@ function SettingsBody() {
             checked={prefs.callVideoDefault}
             onChange={(callVideoDefault) => session.setPrefs({ callVideoDefault })}
           />
+          <CallSizeControl />
           <p className="sheet__note">
             Audio and video go straight between browsers, never through STARBYTE. That also means a strict network
             can stop a call connecting, and the call holds up to {LIMITS.maxCallers} people.

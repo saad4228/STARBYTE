@@ -872,6 +872,12 @@
 .stage.is-idle .bubbles {
   opacity: 0.35;
 }
+/* Faces in a call are there to be looked at — someone who enlarged them did so to see
+   people, and fading them to a third the moment the mouse stops undoes exactly that.
+   Plain presence markers still recede. */
+.stage.is-idle .bubbles:has(.bubble.is-call) {
+  opacity: 0.9;
+}
 .bubble {
   position: relative;
   display: grid;
@@ -2234,6 +2240,28 @@ dialog {
 .bubble__btn--call.is-speaking {
   box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.6);
 }
+/* The faces can be grown by the viewer, so everything around them follows the same number
+   rather than being pinned to the old 40px. Bigger faces wrap instead of running off the
+   picture, and the row grows upward from the controls. */
+.bubbles {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(70%, 640px);
+}
+.bubble__btn--call {
+  width: var(--call-face, 40px);
+  height: var(--call-face, 40px);
+}
+.bubble__btn--call.is-speaking {
+  box-shadow: 0 0 0 max(3px, calc(var(--call-face, 40px) * 0.055)) rgba(52, 211, 153, 0.6);
+}
+.bubble.is-call .bubble__name {
+  max-width: calc(var(--call-face, 40px) + 16px);
+}
+.bubble.is-call .bubble__mic {
+  width: max(18px, calc(var(--call-face, 40px) * 0.3));
+  height: max(18px, calc(var(--call-face, 40px) * 0.3));
+}
 .bubble__btn--call.is-noroute {
   box-shadow: 0 0 0 2px var(--danger);
   opacity: 0.6;
@@ -2508,4 +2536,35 @@ dialog {
   .livebar__delay {
     display: none;
   }
+}
+
+/* The face-size control, in the call panel and in settings. */
+.callsize {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.callsize__label {
+  flex: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.callsize .range {
+  flex: 1;
+  min-width: 80px;
+}
+.callsize__value {
+  flex: none;
+  min-width: 42px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+}
+/* A phone's strip scrolls sideways, so a larger face is fine — it just needs the room. */
+.strip li.is-call {
+  flex: none;
 }

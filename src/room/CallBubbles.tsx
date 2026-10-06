@@ -2,6 +2,7 @@ import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Avatar } from "../art/Avatar";
 import { cx } from "../lib/cx";
+import { CALL_SIZE_MAX, CALL_SIZE_MIN } from "./prefs";
 import { PixelButton } from "../ui/PixelButton";
 import { useRoom, useSession } from "./context";
 
@@ -125,7 +126,34 @@ export function CallPanel() {
           Leave call
         </PixelButton>
       </div>
+      <CallSizeControl />
     </div>
+  );
+}
+
+/**
+ * How big the faces are drawn. It lives next to the call controls rather than buried in
+ * settings, because the moment you notice the faces are too small is the moment you are
+ * looking at this panel. Personal, like volume — it changes nothing for anyone else.
+ */
+export function CallSizeControl() {
+  const session = useSession();
+  const size = useRoom((s) => s.prefs.callSize);
+  return (
+    <label className="callsize">
+      <span className="callsize__label">Face size</span>
+      <input
+        type="range"
+        className="range"
+        min={CALL_SIZE_MIN}
+        max={CALL_SIZE_MAX}
+        step={4}
+        value={size}
+        onChange={(e) => session.setPrefs({ callSize: Number(e.target.value) })}
+        aria-label="Size of the faces in the call"
+      />
+      <span className="callsize__value tnum">{size}px</span>
+    </label>
   );
 }
 
